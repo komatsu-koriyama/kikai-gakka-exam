@@ -9,6 +9,7 @@
 h1 {
   margin-bottom: 24px;
   font-size: 28px;
+  text-align: center;
 }
 
 h2 {
@@ -17,14 +18,73 @@ h2 {
 }
 
 .card {
-  padding: 20px;
+  padding: 24px;
   margin-bottom: 20px;
   border: 1px solid #ddd;
   border-radius: 8px;
   background: #fff;
 }
 
+.progress {
+  font-weight: bold;
+}
+
+.question-text {
+  margin: 24px 0;
+  font-size: 22px;
+}
+
+.answer-buttons {
+  display: flex;
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.answer-button {
+  width: 120px;
+  height: 64px;
+  font-size: 32px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.answer-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.button {
+  padding: 10px 20px;
+  margin-top: 16px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.result {
+  padding: 16px;
+  margin-top: 20px;
+  border-radius: 8px;
+}
+
+.correct {
+  border: 1px solid #2e7d32;
+  background: #f1f8f1;
+}
+
+.wrong {
+  border: 1px solid #c62828;
+  background: #fff5f5;
+}
+
+.review-item {
+  margin-bottom: 20px;
+}
+
 .error {
   color: red;
   font-weight: bold;
+}
+
+.note {
+  font-size: 14px;
 }
