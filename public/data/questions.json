@@ -1,0 +1,518 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026/07/06 18:07:17",
+  "questionCount": 15,
+  "questions": [
+    {
+      "id": "ks-001",
+      "source": "☆【2026年】(JPN)新規機械部門学科試験問題集_真偽法",
+      "sourceQuestionNo": "1",
+      "type": "true_false",
+      "category": "材料・熱処理・表面処理",
+      "subCategory": "ドリル・穴あけ",
+      "tags": [
+        "ステンレス鋼",
+        "窒化鋼",
+        "被削性",
+        "ドリル",
+        "先端角"
+      ],
+      "question": "ステンレス鋼及び窒化鋼等の被削性の悪い材料の穴あけには、ドリルの先端角を118°より大きくしたほうがよい。",
+      "choices": null,
+      "answer": true,
+      "explanation": "ステンレス用ドリルでは135°など118°より大きい先端角が採用される。先端角を大きくすると径方向力が小さくなり、中心部の強度も増す。",
+      "difficulty": "easy",
+      "isCalculation": false,
+      "shuffleChoices": false,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "ks-002",
+      "source": "☆【2026年】(JPN)新規機械部門学科試験問題集_真偽法",
+      "sourceQuestionNo": "2",
+      "type": "true_false",
+      "category": "加工・工作機械",
+      "subCategory": "ドリル・穴あけ",
+      "tags": [
+        "穴あけ",
+        "ドリル",
+        "チゼル角",
+        "食付き",
+        "多角形"
+      ],
+      "question": "穴あけ加工において、穴の口元が多角形になる場合には、送り速度よりチゼル角のほうが大きく影響している。",
+      "choices": null,
+      "answer": true,
+      "explanation": "穴口の多角形化は、ドリル中心部のチゼル形状による食付き不安定の影響が大きい。",
+      "difficulty": "normal",
+      "isCalculation": false,
+      "shuffleChoices": false,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "ks-003",
+      "source": "☆【2026年】(JPN)新規機械部門学科試験問題集_真偽法",
+      "sourceQuestionNo": "3",
+      "type": "true_false",
+      "category": "材料・熱処理・表面処理",
+      "subCategory": "ドリル・穴あけ",
+      "tags": [
+        "鋳鉄",
+        "アルミニウム",
+        "ドリル",
+        "ねじれ角",
+        "刃先強度"
+      ],
+      "question": "鋳鉄に使用するドリルの溝のねじれ角は、アルミニウムに使用する場合より小さいほうがよい。",
+      "choices": null,
+      "answer": true,
+      "explanation": "硬い被削材では刃先強度を上げるためねじれ角を小さくし、軟らかい被削材では切れ味重視でねじれ角を大きくする。",
+      "difficulty": "hard",
+      "isCalculation": false,
+      "shuffleChoices": false,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "ks-004",
+      "source": "☆【2026年】(JPN)新規機械部門学科試験問題集_真偽法",
+      "sourceQuestionNo": "4",
+      "type": "true_false",
+      "category": "加工・工作機械",
+      "subCategory": "研削工具・砥石",
+      "tags": [
+        "ダイヤモンドドレッサ",
+        "砥石",
+        "ドレッシング",
+        "ツルーイング",
+        "フォーミング"
+      ],
+      "question": "ダイヤモンドドレッサは、といしのドレッシング及びツルーイング（フォーミングを含む）に使用する工具である。",
+      "choices": null,
+      "answer": true,
+      "explanation": "ダイヤモンドドレッサは、砥石の形直しであるツルーイングと、目直しであるドレッシングの両方に用いられる工具である。",
+      "difficulty": "easy",
+      "isCalculation": false,
+      "shuffleChoices": false,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "ks-005",
+      "source": "☆【2026年】(JPN)新規機械部門学科試験問題集_真偽法",
+      "sourceQuestionNo": "5",
+      "type": "true_false",
+      "category": "材料・熱処理・表面処理",
+      "subCategory": "研削工具・砥石",
+      "tags": [
+        "研削といし",
+        "目づまり",
+        "アルミニウム合金",
+        "超硬合金",
+        "気孔"
+      ],
+      "question": "研削といしの目づまりは、アルミニウム合金の研削より超硬合金の研削のほうに多く発生する。",
+      "choices": null,
+      "answer": false,
+      "explanation": "目づまりは気孔が切り屑で塞がる現象で、アルミニウムのような軟らかく粘い材料の研削で起こりやすい。",
+      "difficulty": "normal",
+      "isCalculation": false,
+      "shuffleChoices": false,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "kt-001",
+      "source": "☆【2026年】(JPN)新規機械部門学科試験問題集_択一試験用",
+      "sourceQuestionNo": "1",
+      "type": "multiple_choice",
+      "category": "材料・熱処理・表面処理",
+      "subCategory": "切削工具・研削工具",
+      "tags": [
+        "セラミック工具",
+        "超硬合金",
+        "P10",
+        "P40",
+        "砥石",
+        "フライス"
+      ],
+      "question": "次の切削及び研削工具に関する記述のうち、正しいものはどれか。",
+      "choices": [
+        {
+          "id": "A",
+          "text": "セラミック工具は、アルミニウムの切削に優れている。",
+          "isCorrect": false,
+          "explanation": "セラミック工具は耐熱性は高いが、アルミニウムは凝着しやすく、一般にはダイヤモンド系工具などが適する。"
+        },
+        {
+          "id": "B",
+          "text": "超硬合金の研削には、WAと粒のといしを用いるとよい。",
+          "isCorrect": false,
+          "explanation": "超硬合金の研削にはGCやダイヤモンド砥石を用い、WA砥石は主に鋼材向きである。"
+        },
+        {
+          "id": "C",
+          "text": "鋼を高速精密切削するには、超硬合金のP40よりもP10のほうが優れている。",
+          "isCorrect": true,
+          "explanation": "P10はP40より耐摩耗性が高く、鋼の高速・仕上げ切削に適する。"
+        },
+        {
+          "id": "D",
+          "text": "内丸フライスは、凹R削り用である。",
+          "isCorrect": false,
+          "explanation": "内丸フライスは凸R面を削る工具で、凹R削りは外丸フライスを用いる。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "",
+      "difficulty": "hard",
+      "isCalculation": false,
+      "shuffleChoices": true,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "kt-002",
+      "source": "☆【2026年】(JPN)新規機械部門学科試験問題集_択一試験用",
+      "sourceQuestionNo": "2",
+      "type": "multiple_choice",
+      "category": "加工・工作機械",
+      "subCategory": "工作機械",
+      "tags": [
+        "ブローチ盤",
+        "ブローチ",
+        "荒刃",
+        "仕上刃",
+        "表面加工",
+        "内面加工"
+      ],
+      "question": "ブローチ盤に関する記述として、正しいものはどれか。",
+      "choices": [
+        {
+          "id": "A",
+          "text": "といしを用いて加工する機械である。",
+          "isCorrect": false,
+          "explanation": "といしを用いるのは研削盤であり、ブローチ盤ではない。"
+        },
+        {
+          "id": "B",
+          "text": "工作物の表面や穴の内面にエンドミルを使用して加工する機械である。",
+          "isCorrect": false,
+          "explanation": "エンドミルで加工するのは主にフライス盤やマシニングセンタである。"
+        },
+        {
+          "id": "C",
+          "text": "荒刃と仕上刃とを組み合わせた多数の切れ刃を寸法順に配列した工具を使用して、工作物の表面又は穴の内面を加工する機械である。",
+          "isCorrect": true,
+          "explanation": "ブローチ盤は荒刃・仕上刃を寸法順に並べたブローチで表面や穴内面を加工する。"
+        },
+        {
+          "id": "D",
+          "text": "主軸と共に回転するバイトで、前もってあけられた下穴をくり広げる機械である。",
+          "isCorrect": false,
+          "explanation": "回転するバイトで下穴を広げる説明は中ぐり盤に近い。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "",
+      "difficulty": "easy",
+      "isCalculation": false,
+      "shuffleChoices": true,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "kt-003",
+      "source": "☆【2026年】(JPN)新規機械部門学科試験問題集_択一試験用",
+      "sourceQuestionNo": "3",
+      "type": "multiple_choice",
+      "category": "加工・工作機械",
+      "subCategory": "工作機械",
+      "tags": [
+        "平削り盤",
+        "ボール盤",
+        "旋盤",
+        "フライス盤",
+        "主運動",
+        "送り運動"
+      ],
+      "question": "工作機械に関する記述のうち誤っているものはどれか。",
+      "choices": [
+        {
+          "id": "A",
+          "text": "平面を加工する機械には、主に主運動が直進運動するものと回転運動するものに大別される。前者を平削り盤という。",
+          "isCorrect": false,
+          "explanation": "直進主運動で平面加工する代表は平削り盤、回転主運動で行う代表はフライス盤である。"
+        },
+        {
+          "id": "B",
+          "text": "ボール盤は主としてドリルを使用する穴あけ用の機械で、場合によってはタッピング、リーミングなども行える。",
+          "isCorrect": false,
+          "explanation": "ボール盤はドリル穴あけを主とし、タップ加工やリーマ加工も可能である。"
+        },
+        {
+          "id": "C",
+          "text": "旋盤は主にバイトを用いて外丸削り、突切り、正面削りなどの加工を行う機械で、加工物が回転主運動、工具が送り運動を行う。",
+          "isCorrect": false,
+          "explanation": "旋盤は工作物が回転し、バイトが送り運動を行う工作機械である。"
+        },
+        {
+          "id": "D",
+          "text": "工具であるフライスに回転主運動を与え、加工物に回転運動を与えて切削する機械をフライス盤という。",
+          "isCorrect": true,
+          "explanation": "フライス盤ではフライス工具が回転し、工作物は主として送り運動を行う。工作物に回転運動を与える説明が不適切である。"
+        }
+      ],
+      "answer": "D",
+      "explanation": "",
+      "difficulty": "normal",
+      "isCalculation": false,
+      "shuffleChoices": true,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "kt-004",
+      "source": "☆【2026年】(JPN)新規機械部門学科試験問題集_択一試験用",
+      "sourceQuestionNo": "4",
+      "type": "multiple_choice",
+      "category": "測定・品質・製図規格",
+      "subCategory": "工具規格・チップ記号",
+      "tags": [
+        "スロアウェイチップ",
+        "SNMG",
+        "形状記号",
+        "逃げ角",
+        "精度記号",
+        "コーナ半径"
+      ],
+      "question": "次に示すスロアウェイチップの名称で、誤っているものはどれか。SNMG120408－UM",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Sは形状記号を示す",
+          "isCorrect": false,
+          "explanation": "SNMGのSはチップ形状を表し、Sは四角形を示す。"
+        },
+        {
+          "id": "B",
+          "text": "Nは逃げ角記号を示す",
+          "isCorrect": false,
+          "explanation": "Nは逃げ角記号で、逃げ角0度を示す。"
+        },
+        {
+          "id": "C",
+          "text": "Mは精度記号を示す",
+          "isCorrect": false,
+          "explanation": "Mは精度記号である。"
+        },
+        {
+          "id": "D",
+          "text": "08は厚さ記号を示す",
+          "isCorrect": true,
+          "explanation": "SNMG120408の最後の08は主にコーナ半径記号を示す。厚さは中間の数字04に相当する。"
+        }
+      ],
+      "answer": "D",
+      "explanation": "",
+      "difficulty": "hard",
+      "isCalculation": false,
+      "shuffleChoices": true,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "kt-005",
+      "source": "☆【2026年】(JPN)新規機械部門学科試験問題集_択一試験用",
+      "sourceQuestionNo": "5",
+      "type": "multiple_choice",
+      "category": "加工・工作機械",
+      "subCategory": "ドリル・穴あけ",
+      "tags": [
+        "スタブドリル",
+        "コアードリル",
+        "ガンドリル",
+        "スターティングドリル",
+        "穴位置"
+      ],
+      "question": "次のドリルについての記述のうち、適切でないものはどれか。",
+      "choices": [
+        {
+          "id": "A",
+          "text": "スタブドリルとは、全長がレギュラレングドリルより長いドリルである。",
+          "isCorrect": true,
+          "explanation": "スタブドリルは剛性を高めるため全長が短いドリルであり、レギュラレングスより長くない。"
+        },
+        {
+          "id": "B",
+          "text": "コアードリルとは、下穴加工後の仕上げ及びリーマの下穴加工等に用いるドリルである。",
+          "isCorrect": false,
+          "explanation": "コアードリルは下穴後の仕上げやリーマ下穴の修正に用いられる。"
+        },
+        {
+          "id": "C",
+          "text": "ガンドリルとは、切れ刃が1枚又は2枚のストレート溝を持つドリルである。",
+          "isCorrect": false,
+          "explanation": "ガンドリルは深穴加工用で、ストレート溝と単刃または二刃構造をもつ。"
+        },
+        {
+          "id": "D",
+          "text": "スターティングドリルとは、穴の位置決め精度を高めるため、穴加工の前に用いるドリルである。",
+          "isCorrect": false,
+          "explanation": "スターティングドリルは穴位置の振れを抑えるため、穴あけ前の位置決めに用いる。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "",
+      "difficulty": "easy",
+      "isCalculation": false,
+      "shuffleChoices": true,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "kh-001",
+      "source": "☆(JPN)品質管理学科問題集",
+      "sourceQuestionNo": "1",
+      "type": "true_false",
+      "category": "品質管理とは",
+      "subCategory": "品質管理の歴史・展開",
+      "tags": [
+        "コマツ",
+        "品質管理活動",
+        "導入期",
+        "発展期",
+        "転換期",
+        "日常管理"
+      ],
+      "question": "コマツの品質管理活動の歩みは、・導入期 ・発展期 ・転換期の三つに分けられ、現在は各部門・事業所に推進の権限が委譲され、幅広い視野に立った経営の展開や日常管理に活用されている。",
+      "choices": null,
+      "answer": true,
+      "explanation": "コマツの品質管理活動は37年の歴史を経て、現在では経営方針の展開や日常管理に活用されている。",
+      "difficulty": "normal",
+      "isCalculation": false,
+      "shuffleChoices": false,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "kh-002",
+      "source": "☆(JPN)品質管理学科問題集",
+      "sourceQuestionNo": "2",
+      "type": "true_false",
+      "category": "品質管理とは",
+      "subCategory": "品質管理の導入背景",
+      "tags": [
+        "コマツ",
+        "CAT",
+        "資本自由化",
+        "マルA対策",
+        "デミング賞",
+        "品質管理導入"
+      ],
+      "question": "コマツの品質管理は、今か37年前、当時の世界最大の建機メーカＣＡＴ社が資本の自由化に乗じて日本に上陸するという、コマツ存亡の危機に打ち勝つため導入したもので、マルＡ対策などの活動を通じ、デミング賞獲得などコマツの品質を世界レベルに引き上げる役割を果たした。",
+      "choices": null,
+      "answer": true,
+      "explanation": "コマツは品質管理活動を37年前、企業存亡の危機に打ち勝つため導入した。今日のコマツがあるのは、この時の活動のお陰であると言われている。",
+      "difficulty": "hard",
+      "isCalculation": false,
+      "shuffleChoices": false,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "kh-003",
+      "source": "☆(JPN)品質管理学科問題集",
+      "sourceQuestionNo": "3",
+      "type": "true_false",
+      "category": "品質管理とは",
+      "subCategory": "品質管理賞・品質保証システム",
+      "tags": [
+        "日本品質管理賞",
+        "デミング賞",
+        "品質保証システム",
+        "グループワイド",
+        "総合管理"
+      ],
+      "question": "1981年に受賞した日本品質管理賞は、デミング賞受賞(1964年)以降、品質保証システムの充実やグループワイドの品質管理活動など、総合管理体制の整備、構築を絶えず積み重ねて来た結果が認められたものである。",
+      "choices": null,
+      "answer": true,
+      "explanation": "日本品質管理賞は1969年に設定されたデミング賞の上級賞であり、コマツはトヨタ自動車に次ぎ日本で６番目に受賞した。",
+      "difficulty": "easy",
+      "isCalculation": false,
+      "shuffleChoices": false,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "kh-004",
+      "source": "☆(JPN)品質管理学科問題集",
+      "sourceQuestionNo": "4",
+      "type": "true_false",
+      "category": "品質管理とは",
+      "subCategory": "品質の定義",
+      "tags": [
+        "品質",
+        "製品品質",
+        "コスト",
+        "量",
+        "納期",
+        "サービス",
+        "仕事のやり方",
+        "仕組み"
+      ],
+      "question": "品質管理で言う品質とは、製品の品質だけでなくお客の要求に対する満足度を基準とした商品「製品品質、コスト、量、納期、サービス」を対象としているが、それを生み出す要因である仕事のやり方や仕組みは対象にしていない。",
+      "choices": null,
+      "answer": false,
+      "explanation": "品質とは、それを生み出す要因である仕事のやり方や仕組みも、その対象にしている。",
+      "difficulty": "normal",
+      "isCalculation": false,
+      "shuffleChoices": false,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    },
+    {
+      "id": "kh-005",
+      "source": "☆(JPN)品質管理学科問題集",
+      "sourceQuestionNo": "5",
+      "type": "true_false",
+      "category": "品質管理とは",
+      "subCategory": "PDCA・管理サイクル",
+      "tags": [
+        "管理",
+        "PDCA",
+        "Plan",
+        "Do",
+        "Check",
+        "Action",
+        "スパイラルアップ"
+      ],
+      "question": "管理とは、一口で言えばPlan－Do－Check－Actionのサイクルを繰り返し回すことであり、これをＰＤＣＡのサイクルまたは管理のサイクルという。",
+      "choices": null,
+      "answer": true,
+      "explanation": "サイクルを回すごとに、スパイラルアップすることが大切である。",
+      "difficulty": "hard",
+      "isCalculation": false,
+      "shuffleChoices": false,
+      "isActive": true,
+      "version": 1,
+      "lastUpdated": "2026/07/06"
+    }
+  ]
+}
