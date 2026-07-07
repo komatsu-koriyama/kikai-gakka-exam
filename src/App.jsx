@@ -207,6 +207,7 @@ function App() {
   const [mockQuestions, setMockQuestions] = useState([]);
   const [mockAnswerRecords, setMockAnswerRecords] = useState([]);
   const [reviewQuestions, setReviewQuestions] = useState([]);
+  const [mockReviewQuestions, setMockReviewQuestions] = useState([]);
   const [startedAt, setStartedAt] = useState(null);
   const [finishedAt, setFinishedAt] = useState(null);
   const [learningHistory, setLearningHistory] = useState(loadLearningHistory);
@@ -264,6 +265,8 @@ function App() {
       ? mockQuestions
       : mode === "wrong_review"
       ? reviewQuestions
+      : mode === "mock_exam_review"
+      ? mockReviewQuestions
       : [];
 
   const currentQuestion = activeQuestions[currentIndex];
@@ -277,7 +280,8 @@ function App() {
     if (
       (mode !== "multiple_choice" &&
         mode !== "mock_exam" &&
-        mode !== "wrong_review") ||
+        mode !== "wrong_review" &&
+        mode !== "mock_exam_review") ||
       currentQuestion?.type !== "multiple_choice" ||
       !currentQuestion?.choices
     ) {
@@ -303,13 +307,15 @@ function App() {
       targetMode === "true_false" ||
       targetMode === "multiple_choice" ||
       targetMode === "mock_exam" ||
-      targetMode === "wrong_review";
+      targetMode === "wrong_review" ||
+      targetMode === "mock_exam_review";
 
     if (!shouldPersist || newResults.length === 0) return;
 
     setLearningHistory((prevHistory) => {
       const nextHistory = updateHistoryWithResults(prevHistory, newResults, {
-        isReviewMode: targetMode === "wrong_review",
+        isReviewMode:
+          targetMode === "wrong_review" || targetMode === "mock_exam_review",
       });
 
       saveLearningHistory(nextHistory);
@@ -338,15 +344,28 @@ function App() {
       setMockQuestions(shuffleArray(allQuestions));
       setMockAnswerRecords([]);
       setReviewQuestions([]);
+      setMockReviewQuestions([]);
     } else if (nextMode === "wrong_review") {
       setReviewQuestions(shuffleArray(wrongQuestions));
       setMockQuestions([]);
       setMockAnswerRecords([]);
+      setMockReviewQuestions([]);
     } else {
       setMockQuestions([]);
       setMockAnswerRecords([]);
       setReviewQuestions([]);
+      setMockReviewQuestions([]);
     }
+  };
+
+  const startMockExamReview = (reviewTargets) => {
+    resetPracticeState();
+    setMode("mock_exam_review");
+    setMockReviewQuestions(shuffleArray(reviewTargets));
+    setMockQuestions([]);
+    setMockAnswerRecords([]);
+    setReviewQuestions([]);
+    setStartedAt(new Date());
   };
 
   const backToMenu = () => {
@@ -354,6 +373,7 @@ function App() {
     setMockQuestions([]);
     setMockAnswerRecords([]);
     setReviewQuestions([]);
+    setMockReviewQuestions([]);
     setMode("menu");
   };
 
@@ -463,6 +483,11 @@ function App() {
     persistResults([result], "wrong_review");
   };
 
+  const handleMockExamReviewAnswer = (result) => {
+    setResults((prev) => [...prev, result]);
+    persistResults([result], "mock_exam_review");
+  };
+
   const handleNext = () => {
     setSelectedAnswer(null);
     setSelectedChoiceId(null);
@@ -482,6 +507,13 @@ function App() {
     if (mode === "wrong_review") {
       resetPracticeState();
       setReviewQuestions(shuffleArray(wrongQuestions));
+      setStartedAt(new Date());
+      return;
+    }
+
+    if (mode === "mock_exam_review") {
+      resetPracticeState();
+      setMockReviewQuestions(shuffleArray(mockReviewQuestions));
       setStartedAt(new Date());
       return;
     }
@@ -622,6 +654,7 @@ function App() {
         finishedAt={finishedAt}
         onRestart={handleRestart}
         onBackToMenu={backToMenu}
+        onStartMockExamReview={startMockExamReview}
       />
     );
   }
@@ -659,7 +692,9 @@ function App() {
 
   if (mode === "wrong_review") {
     return (
-      <WrongReviewScreen
+      <ReviewPracticeScreen
+        title="誤答復習"
+        note="このモードで2回連続正解した問題は、克服扱いで誤答復習対象から外れます。"
         currentIndex={currentIndex}
         questions={activeQuestions}
         currentQuestion={currentQuestion}
@@ -671,6 +706,28 @@ function App() {
         onSelectChoice={setSelectedChoiceId}
         onSetIsAnswered={setIsAnswered}
         onSaveResult={handleWrongReviewAnswer}
+        onNext={handleNext}
+        onBackToMenu={backToMenu}
+      />
+    );
+  }
+
+  if (mode === "mock_exam_review") {
+    return (
+      <ReviewPracticeScreen
+        title="今回間違えた問題の復習"
+        note="直前の本番模擬で不正解または無回答だった問題だけを復習します。"
+        currentIndex={currentIndex}
+        questions={activeQuestions}
+        currentQuestion={currentQuestion}
+        displayChoices={displayChoices}
+        selectedAnswer={selectedAnswer}
+        selectedChoiceId={selectedChoiceId}
+        isAnswered={isAnswered}
+        onSelectTrueFalse={setSelectedAnswer}
+        onSelectChoice={setSelectedChoiceId}
+        onSetIsAnswered={setIsAnswered}
+        onSaveResult={handleMockExamReviewAnswer}
         onNext={handleNext}
         onBackToMenu={backToMenu}
       />
@@ -861,7 +918,9 @@ function MultipleChoicePracticeScreen({
   );
 }
 
-function WrongReviewScreen({
+function ReviewPracticeScreen({
+  title,
+  note,
   currentIndex,
   questions,
   currentQuestion,
@@ -902,16 +961,14 @@ function WrongReviewScreen({
 
   return (
     <main className="container">
-      <h1>誤答復習</h1>
+      <h1>{title}</h1>
 
       <section className="card">
         <p className="progress">
           {currentIndex + 1} / {questions.length} 問
         </p>
 
-        <p className="note">
-          このモードで2回連続正解した問題は、克服扱いで誤答復習対象から外れます。
-        </p>
+        <p className="note">{note}</p>
 
         <QuestionMeta question={currentQuestion} />
 
@@ -1182,6 +1239,7 @@ function ResultScreen({
   finishedAt,
   onRestart,
   onBackToMenu,
+  onStartMockExamReview,
 }) {
   const correctCount = results.filter((result) => result.isCorrect).length;
   const wrongCount = results.filter(
@@ -1195,6 +1253,10 @@ function ResultScreen({
   );
   const durationText = formatDuration(startedAt, finishedAt);
   const categoryStats = buildCategoryStats(questions, results);
+  const mockExamReviewQuestions = buildMockExamReviewQuestions(
+    questions,
+    results
+  );
 
   return (
     <main className="container">
@@ -1214,6 +1276,26 @@ function ResultScreen({
           <p className="note">
             2回連続正解した問題は、誤答復習対象から外れます。トップ画面の誤答復習対象数で確認できます。
           </p>
+        )}
+
+        {mode === "mock_exam_review" && (
+          <p className="note">
+            この復習結果も学習履歴に保存されます。
+          </p>
+        )}
+
+        {mode === "mock_exam" && mockExamReviewQuestions.length > 0 && (
+          <button
+            type="button"
+            className="button primary"
+            onClick={() => onStartMockExamReview(mockExamReviewQuestions)}
+          >
+            今回間違えた問題を復習する
+          </button>
+        )}
+
+        {mode === "mock_exam" && mockExamReviewQuestions.length === 0 && (
+          <p className="note">今回の本番模擬で復習対象の問題はありません。</p>
         )}
       </section>
 
@@ -1434,6 +1516,16 @@ function buildCategoryStats(questions, results) {
   });
 }
 
+function buildMockExamReviewQuestions(questions, results) {
+  return questions.filter((question, index) => {
+    const result = results[index];
+
+    if (!result) return false;
+
+    return result.isUnanswered || !result.isCorrect;
+  });
+}
+
 function formatDuration(startedAt, finishedAt) {
   if (!startedAt || !finishedAt) return "";
 
@@ -1450,6 +1542,7 @@ function getModeTitle(mode) {
   if (mode === "multiple_choice") return "択一演習";
   if (mode === "mock_exam") return "本番模擬";
   if (mode === "wrong_review") return "誤答復習";
+  if (mode === "mock_exam_review") return "今回間違えた問題の復習";
   return "学科試験演習アプリ";
 }
 
