@@ -23,6 +23,10 @@ function shuffleArray(array) {
   return [...array].sort(() => Math.random() - 0.5);
 }
 
+function getCategoryName(question) {
+  return question.category || "未設定";
+}
+
 function formatTrueFalse(value) {
   if (value === null || value === undefined) return "未回答";
   return value ? "○" : "×";
@@ -198,16 +202,23 @@ function App() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [mode, setMode] = useState("menu");
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [selectedChoiceId, setSelectedChoiceId] = useState(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [results, setResults] = useState([]);
   const [displayChoices, setDisplayChoices] = useState([]);
+
+  const [practiceQuestions, setPracticeQuestions] = useState([]);
   const [mockQuestions, setMockQuestions] = useState([]);
   const [mockAnswerRecords, setMockAnswerRecords] = useState([]);
   const [reviewQuestions, setReviewQuestions] = useState([]);
   const [mockReviewQuestions, setMockReviewQuestions] = useState([]);
+
+  const [setupSelectedCategories, setSetupSelectedCategories] = useState([]);
+  const [setupQuestionCount, setSetupQuestionCount] = useState("");
+
   const [startedAt, setStartedAt] = useState(null);
   const [finishedAt, setFinishedAt] = useState(null);
   const [learningHistory, setLearningHistory] = useState(loadLearningHistory);
@@ -257,10 +268,8 @@ function App() {
   }, [allQuestions, learningHistory]);
 
   const activeQuestions =
-    mode === "true_false"
-      ? trueFalseQuestions
-      : mode === "multiple_choice"
-      ? multipleChoiceQuestions
+    mode === "true_false" || mode === "multiple_choice"
+      ? practiceQuestions
       : mode === "mock_exam"
       ? mockQuestions
       : mode === "wrong_review"
@@ -273,6 +282,8 @@ function App() {
 
   const isFinished =
     mode !== "menu" &&
+    mode !== "true_false_setup" &&
+    mode !== "multiple_choice_setup" &&
     activeQuestions.length > 0 &&
     currentIndex >= activeQuestions.length;
 
@@ -335,22 +346,85 @@ function App() {
     setFinishedAt(null);
   };
 
+  const resetSetupState = () => {
+    setSetupSelectedCategories([]);
+    setSetupQuestionCount("");
+  };
+
+  const openPracticeSetup = (setupMode) => {
+    resetPracticeState();
+    resetSetupState();
+    setPracticeQuestions([]);
+    setMockQuestions([]);
+    setMockAnswerRecords([]);
+    setReviewQuestions([]);
+    setMockReviewQuestions([]);
+    setMode(setupMode);
+  };
+
+  const buildConfiguredPracticeQuestions = (sourceQuestions) => {
+    const selectedCategorySet = new Set(setupSelectedCategories);
+
+    const filtered =
+      setupSelectedCategories.length === 0
+        ? sourceQuestions
+        : sourceQuestions.filter((question) =>
+            selectedCategorySet.has(getCategoryName(question))
+          );
+
+    const requestedCount = Number(setupQuestionCount);
+    const shuffled = shuffleArray(filtered);
+
+    if (!requestedCount || requestedCount <= 0) {
+      return shuffled;
+    }
+
+    return shuffled.slice(0, Math.min(requestedCount, shuffled.length));
+  };
+
+  const startConfiguredPractice = (practiceMode) => {
+    const sourceQuestions =
+      practiceMode === "true_false"
+        ? trueFalseQuestions
+        : multipleChoiceQuestions;
+
+    const configuredQuestions = buildConfiguredPracticeQuestions(sourceQuestions);
+
+    if (configuredQuestions.length === 0) {
+      window.alert("条件に一致する問題がありません。");
+      return;
+    }
+
+    resetPracticeState();
+    setPracticeQuestions(configuredQuestions);
+    setMockQuestions([]);
+    setMockAnswerRecords([]);
+    setReviewQuestions([]);
+    setMockReviewQuestions([]);
+    setMode(practiceMode);
+    setStartedAt(new Date());
+  };
+
   const startMode = (nextMode) => {
     resetPracticeState();
+    resetSetupState();
     setMode(nextMode);
     setStartedAt(new Date());
 
     if (nextMode === "mock_exam") {
       setMockQuestions(shuffleArray(allQuestions));
       setMockAnswerRecords([]);
+      setPracticeQuestions([]);
       setReviewQuestions([]);
       setMockReviewQuestions([]);
     } else if (nextMode === "wrong_review") {
       setReviewQuestions(shuffleArray(wrongQuestions));
+      setPracticeQuestions([]);
       setMockQuestions([]);
       setMockAnswerRecords([]);
       setMockReviewQuestions([]);
     } else {
+      setPracticeQuestions([]);
       setMockQuestions([]);
       setMockAnswerRecords([]);
       setReviewQuestions([]);
@@ -360,8 +434,10 @@ function App() {
 
   const startMockExamReview = (reviewTargets) => {
     resetPracticeState();
+    resetSetupState();
     setMode("mock_exam_review");
     setMockReviewQuestions(shuffleArray(reviewTargets));
+    setPracticeQuestions([]);
     setMockQuestions([]);
     setMockAnswerRecords([]);
     setReviewQuestions([]);
@@ -370,6 +446,8 @@ function App() {
 
   const backToMenu = () => {
     resetPracticeState();
+    resetSetupState();
+    setPracticeQuestions([]);
     setMockQuestions([]);
     setMockAnswerRecords([]);
     setReviewQuestions([]);
@@ -410,17 +488,6 @@ function App() {
     persistResults([result]);
   };
 
-  const restoreMockSelection = (record) => {
-    if (!record) {
-      setSelectedAnswer(null);
-      setSelectedChoiceId(null);
-      return;
-    }
-
-    setSelectedAnswer(record.selectedAnswer);
-    setSelectedChoiceId(record.selectedChoiceId);
-  };
-
   const finishMockExam = (answerRecords) => {
     const completedResults = mockQuestions.map((question, index) => {
       return answerRecords[index] ?? buildUnansweredResult(question);
@@ -444,9 +511,9 @@ function App() {
       return;
     }
 
-    const nextIndex = currentIndex + 1;
-    setCurrentIndex(nextIndex);
-    restoreMockSelection(nextRecords[nextIndex]);
+    setSelectedAnswer(null);
+    setSelectedChoiceId(null);
+    setCurrentIndex((prev) => prev + 1);
   };
 
   const handleMockSelectTrueFalse = (answer) => {
@@ -470,22 +537,9 @@ function App() {
     saveMockAnswerAndMoveNext(result);
   };
 
-  const handleMockBack = () => {
-    if (currentIndex <= 0) return;
-
-    const previousIndex = currentIndex - 1;
-    setCurrentIndex(previousIndex);
-    restoreMockSelection(mockAnswerRecords[previousIndex]);
-  };
-
-  const handleWrongReviewAnswer = (result) => {
+  const handleReviewAnswer = (result, reviewMode) => {
     setResults((prev) => [...prev, result]);
-    persistResults([result], "wrong_review");
-  };
-
-  const handleMockExamReviewAnswer = (result) => {
-    setResults((prev) => [...prev, result]);
-    persistResults([result], "mock_exam_review");
+    persistResults([result], reviewMode);
   };
 
   const handleNext = () => {
@@ -514,6 +568,13 @@ function App() {
     if (mode === "mock_exam_review") {
       resetPracticeState();
       setMockReviewQuestions(shuffleArray(mockReviewQuestions));
+      setStartedAt(new Date());
+      return;
+    }
+
+    if (mode === "true_false" || mode === "multiple_choice") {
+      resetPracticeState();
+      setPracticeQuestions(shuffleArray(practiceQuestions));
       setStartedAt(new Date());
       return;
     }
@@ -564,7 +625,7 @@ function App() {
             <button
               type="button"
               className="button primary"
-              onClick={() => startMode("true_false")}
+              onClick={() => openPracticeSetup("true_false_setup")}
               disabled={trueFalseQuestions.length === 0}
             >
               ○×演習を開始
@@ -573,7 +634,7 @@ function App() {
             <button
               type="button"
               className="button primary"
-              onClick={() => startMode("multiple_choice")}
+              onClick={() => openPracticeSetup("multiple_choice_setup")}
               disabled={multipleChoiceQuestions.length === 0}
             >
               択一演習を開始
@@ -627,6 +688,36 @@ function App() {
           </p>
         </section>
       </main>
+    );
+  }
+
+  if (mode === "true_false_setup") {
+    return (
+      <PracticeSetupScreen
+        title="○×演習 設定"
+        questions={trueFalseQuestions}
+        selectedCategories={setupSelectedCategories}
+        questionCount={setupQuestionCount}
+        onChangeSelectedCategories={setSetupSelectedCategories}
+        onChangeQuestionCount={setSetupQuestionCount}
+        onStart={() => startConfiguredPractice("true_false")}
+        onBackToMenu={backToMenu}
+      />
+    );
+  }
+
+  if (mode === "multiple_choice_setup") {
+    return (
+      <PracticeSetupScreen
+        title="択一演習 設定"
+        questions={multipleChoiceQuestions}
+        selectedCategories={setupSelectedCategories}
+        questionCount={setupQuestionCount}
+        onChangeSelectedCategories={setSetupSelectedCategories}
+        onChangeQuestionCount={setSetupQuestionCount}
+        onStart={() => startConfiguredPractice("multiple_choice")}
+        onBackToMenu={backToMenu}
+      />
     );
   }
 
@@ -705,7 +796,7 @@ function App() {
         onSelectTrueFalse={setSelectedAnswer}
         onSelectChoice={setSelectedChoiceId}
         onSetIsAnswered={setIsAnswered}
-        onSaveResult={handleWrongReviewAnswer}
+        onSaveResult={(result) => handleReviewAnswer(result, "wrong_review")}
         onNext={handleNext}
         onBackToMenu={backToMenu}
       />
@@ -727,7 +818,9 @@ function App() {
         onSelectTrueFalse={setSelectedAnswer}
         onSelectChoice={setSelectedChoiceId}
         onSetIsAnswered={setIsAnswered}
-        onSaveResult={handleMockExamReviewAnswer}
+        onSaveResult={(result) =>
+          handleReviewAnswer(result, "mock_exam_review")
+        }
         onNext={handleNext}
         onBackToMenu={backToMenu}
       />
@@ -740,15 +833,128 @@ function App() {
       questions={activeQuestions}
       currentQuestion={currentQuestion}
       displayChoices={displayChoices}
-      selectedAnswer={selectedAnswer}
-      selectedChoiceId={selectedChoiceId}
-      canGoBack={currentIndex > 0}
       onSelectTrueFalse={handleMockSelectTrueFalse}
       onSelectChoice={handleMockSelectChoice}
       onUnansweredNext={handleMockUnansweredNext}
-      onBackQuestion={handleMockBack}
       onBackToMenu={backToMenu}
     />
+  );
+}
+
+function PracticeSetupScreen({
+  title,
+  questions,
+  selectedCategories,
+  questionCount,
+  onChangeSelectedCategories,
+  onChangeQuestionCount,
+  onStart,
+  onBackToMenu,
+}) {
+  const categories = buildCategoryOptions(questions);
+  const selectedCategorySet = new Set(selectedCategories);
+
+  const targetQuestions =
+    selectedCategories.length === 0
+      ? questions
+      : questions.filter((question) =>
+          selectedCategorySet.has(getCategoryName(question))
+        );
+
+  const requestedCount = Number(questionCount);
+  const actualCount =
+    !requestedCount || requestedCount <= 0
+      ? targetQuestions.length
+      : Math.min(requestedCount, targetQuestions.length);
+
+  const toggleCategory = (category) => {
+    if (selectedCategorySet.has(category)) {
+      onChangeSelectedCategories(
+        selectedCategories.filter((item) => item !== category)
+      );
+    } else {
+      onChangeSelectedCategories([...selectedCategories, category]);
+    }
+  };
+
+  const selectAllCategories = () => {
+    onChangeSelectedCategories(categories.map((item) => item.category));
+  };
+
+  const clearCategories = () => {
+    onChangeSelectedCategories([]);
+  };
+
+  return (
+    <main className="container">
+      <h1>{title}</h1>
+
+      <section className="card">
+        <h2>出題カテゴリ</h2>
+        <p className="note">
+          複数選択できます。何も選択しない場合は、全カテゴリから出題します。
+        </p>
+
+        <div className="setup-actions">
+          <button type="button" className="button secondary" onClick={selectAllCategories}>
+            すべて選択
+          </button>
+          <button type="button" className="button secondary" onClick={clearCategories}>
+            選択解除
+          </button>
+        </div>
+
+        <div className="category-grid">
+          {categories.map((item) => (
+            <label key={item.category} className="category-option">
+              <input
+                type="checkbox"
+                checked={selectedCategorySet.has(item.category)}
+                onChange={() => toggleCategory(item.category)}
+              />
+              <span>{item.category}</span>
+              <span className="category-count">{item.count}問</span>
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>出題数</h2>
+        <p className="note">
+          空欄または0以下の場合は、対象問題を全問出題します。指定数が対象問題数を超える場合も、対象問題を全問出題します。
+        </p>
+
+        <input
+          type="number"
+          min="0"
+          className="question-count-input"
+          value={questionCount}
+          onChange={(event) => onChangeQuestionCount(event.target.value)}
+          placeholder="例：10"
+        />
+
+        <div className="setup-summary">
+          <p>条件に一致する問題数：{targetQuestions.length}問</p>
+          <p>実際の出題予定数：{actualCount}問</p>
+        </div>
+      </section>
+
+      <div className="action-row">
+        <button
+          type="button"
+          className="button primary"
+          onClick={onStart}
+          disabled={targetQuestions.length === 0}
+        >
+          演習開始
+        </button>
+
+        <button type="button" className="button secondary" onClick={onBackToMenu}>
+          トップへ戻る
+        </button>
+      </div>
+    </main>
   );
 }
 
@@ -1086,13 +1292,9 @@ function MockExamScreen({
   questions,
   currentQuestion,
   displayChoices,
-  selectedAnswer,
-  selectedChoiceId,
-  canGoBack,
   onSelectTrueFalse,
   onSelectChoice,
   onUnansweredNext,
-  onBackQuestion,
   onBackToMenu,
 }) {
   return (
@@ -1122,22 +1324,14 @@ function MockExamScreen({
           <div className="answer-buttons">
             <button
               type="button"
-              className={
-                selectedAnswer === true
-                  ? "answer-button mock-selected"
-                  : "answer-button"
-              }
+              className="answer-button"
               onClick={() => onSelectTrueFalse(true)}
             >
               ○
             </button>
             <button
               type="button"
-              className={
-                selectedAnswer === false
-                  ? "answer-button mock-selected"
-                  : "answer-button"
-              }
+              className="answer-button"
               onClick={() => onSelectTrueFalse(false)}
             >
               ×
@@ -1154,7 +1348,7 @@ function MockExamScreen({
 
             <ChoiceButtons
               displayChoices={displayChoices}
-              selectedChoiceId={selectedChoiceId}
+              selectedChoiceId={null}
               isAnswered={false}
               onAnswer={onSelectChoice}
             />
@@ -1162,15 +1356,6 @@ function MockExamScreen({
         )}
 
         <div className="action-row">
-          <button
-            type="button"
-            className="button secondary"
-            onClick={onBackQuestion}
-            disabled={!canGoBack}
-          >
-            戻る
-          </button>
-
           <button
             type="button"
             className="button secondary"
@@ -1279,9 +1464,7 @@ function ResultScreen({
         )}
 
         {mode === "mock_exam_review" && (
-          <p className="note">
-            この復習結果も学習履歴に保存されます。
-          </p>
+          <p className="note">この復習結果も学習履歴に保存されます。</p>
         )}
 
         {mode === "mock_exam" && mockExamReviewQuestions.length > 0 && (
@@ -1474,6 +1657,19 @@ function QuestionMeta({ question }) {
       {question.tags?.length > 0 && <p>タグ：{question.tags.join("、")}</p>}
     </div>
   );
+}
+
+function buildCategoryOptions(questions) {
+  const categoryMap = new Map();
+
+  questions.forEach((question) => {
+    const category = getCategoryName(question);
+    categoryMap.set(category, (categoryMap.get(category) ?? 0) + 1);
+  });
+
+  return Array.from(categoryMap.entries())
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => a.category.localeCompare(b.category, "ja"));
 }
 
 function buildCategoryStats(questions, results) {

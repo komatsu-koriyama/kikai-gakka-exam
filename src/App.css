@@ -262,6 +262,60 @@ h2 {
   background: #f7f7f7;
 }
 
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.category-option {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.category-option:hover {
+  background: #f7f7f7;
+}
+
+.category-count {
+  color: #666;
+  font-size: 13px;
+}
+
+.setup-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.question-count-input {
+  width: 160px;
+  padding: 10px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 16px;
+}
+
+.setup-summary {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #f7f7f7;
+}
+
+.setup-summary p {
+  margin: 4px 0;
+}
+
 .error {
   color: red;
   font-weight: bold;
