@@ -140,6 +140,60 @@ function updateHistoryWithResults(currentHistory, results, options = {}) {
   return nextHistory;
 }
 
+function buildTrueFalseResult(question, answer) {
+  const isCorrect = answer === question.answer;
+  const score = getQuestionScore(question, isCorrect, false);
+
+  return {
+    questionId: question.id,
+    type: question.type,
+    selectedAnswer: answer,
+    selectedChoiceId: null,
+    correctAnswer: question.answer,
+    correctChoiceId: null,
+    isCorrect,
+    isUnanswered: false,
+    score,
+  };
+}
+
+function buildMultipleChoiceResult(question, choiceId) {
+  const correctChoice = question.choices.find((choice) => choice.isCorrect);
+  const isCorrect = choiceId === correctChoice?.id;
+  const score = getQuestionScore(question, isCorrect, false);
+
+  return {
+    questionId: question.id,
+    type: question.type,
+    selectedAnswer: null,
+    selectedChoiceId: choiceId,
+    correctAnswer: null,
+    correctChoiceId: correctChoice?.id ?? "",
+    isCorrect,
+    isUnanswered: false,
+    score,
+  };
+}
+
+function buildUnansweredResult(question) {
+  const correctChoice =
+    question.type === "multiple_choice"
+      ? question.choices.find((choice) => choice.isCorrect)
+      : null;
+
+  return {
+    questionId: question.id,
+    type: question.type,
+    selectedAnswer: null,
+    selectedChoiceId: null,
+    correctAnswer: question.type === "true_false" ? question.answer : null,
+    correctChoiceId: correctChoice?.id ?? null,
+    isCorrect: false,
+    isUnanswered: true,
+    score: 0,
+  };
+}
+
 function App() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -151,6 +205,7 @@ function App() {
   const [results, setResults] = useState([]);
   const [displayChoices, setDisplayChoices] = useState([]);
   const [mockQuestions, setMockQuestions] = useState([]);
+  const [mockAnswerRecords, setMockAnswerRecords] = useState([]);
   const [reviewQuestions, setReviewQuestions] = useState([]);
   const [startedAt, setStartedAt] = useState(null);
   const [finishedAt, setFinishedAt] = useState(null);
@@ -281,12 +336,15 @@ function App() {
 
     if (nextMode === "mock_exam") {
       setMockQuestions(shuffleArray(allQuestions));
+      setMockAnswerRecords([]);
       setReviewQuestions([]);
     } else if (nextMode === "wrong_review") {
       setReviewQuestions(shuffleArray(wrongQuestions));
       setMockQuestions([]);
+      setMockAnswerRecords([]);
     } else {
       setMockQuestions([]);
+      setMockAnswerRecords([]);
       setReviewQuestions([]);
     }
   };
@@ -294,6 +352,7 @@ function App() {
   const backToMenu = () => {
     resetPracticeState();
     setMockQuestions([]);
+    setMockAnswerRecords([]);
     setReviewQuestions([]);
     setMode("menu");
   };
@@ -312,20 +371,7 @@ function App() {
   const handleTrueFalseAnswer = (answer) => {
     if (isAnswered || !currentQuestion) return;
 
-    const isCorrect = answer === currentQuestion.answer;
-    const score = getQuestionScore(currentQuestion, isCorrect, false);
-
-    const result = {
-      questionId: currentQuestion.id,
-      type: currentQuestion.type,
-      selectedAnswer: answer,
-      selectedChoiceId: null,
-      correctAnswer: currentQuestion.answer,
-      correctChoiceId: null,
-      isCorrect,
-      isUnanswered: false,
-      score,
-    };
+    const result = buildTrueFalseResult(currentQuestion, answer);
 
     setSelectedAnswer(answer);
     setIsAnswered(true);
@@ -336,21 +382,7 @@ function App() {
   const handleMultipleChoiceAnswer = (choice) => {
     if (isAnswered || !currentQuestion) return;
 
-    const isCorrect = choice.isCorrect;
-    const score = getQuestionScore(currentQuestion, isCorrect, false);
-
-    const result = {
-      questionId: currentQuestion.id,
-      type: currentQuestion.type,
-      selectedAnswer: null,
-      selectedChoiceId: choice.id,
-      correctAnswer: null,
-      correctChoiceId:
-        currentQuestion.choices.find((item) => item.isCorrect)?.id ?? "",
-      isCorrect,
-      isUnanswered: false,
-      score,
-    };
+    const result = buildMultipleChoiceResult(currentQuestion, choice.id);
 
     setSelectedChoiceId(choice.id);
     setIsAnswered(true);
@@ -358,76 +390,72 @@ function App() {
     persistResults([result]);
   };
 
+  const restoreMockSelection = (record) => {
+    if (!record) {
+      setSelectedAnswer(null);
+      setSelectedChoiceId(null);
+      return;
+    }
+
+    setSelectedAnswer(record.selectedAnswer);
+    setSelectedChoiceId(record.selectedChoiceId);
+  };
+
+  const finishMockExam = (answerRecords) => {
+    const completedResults = mockQuestions.map((question, index) => {
+      return answerRecords[index] ?? buildUnansweredResult(question);
+    });
+
+    setResults(completedResults);
+    persistResults(completedResults, "mock_exam");
+    setSelectedAnswer(null);
+    setSelectedChoiceId(null);
+    setCurrentIndex(mockQuestions.length);
+  };
+
+  const saveMockAnswerAndMoveNext = (result) => {
+    const nextRecords = [...mockAnswerRecords];
+    nextRecords[currentIndex] = result;
+
+    setMockAnswerRecords(nextRecords);
+
+    if (currentIndex + 1 >= mockQuestions.length) {
+      finishMockExam(nextRecords);
+      return;
+    }
+
+    const nextIndex = currentIndex + 1;
+    setCurrentIndex(nextIndex);
+    restoreMockSelection(nextRecords[nextIndex]);
+  };
+
   const handleMockSelectTrueFalse = (answer) => {
     if (!currentQuestion || currentQuestion.type !== "true_false") return;
-    setSelectedAnswer(answer);
+
+    const result = buildTrueFalseResult(currentQuestion, answer);
+    saveMockAnswerAndMoveNext(result);
   };
 
   const handleMockSelectChoice = (choice) => {
     if (!currentQuestion || currentQuestion.type !== "multiple_choice") return;
-    setSelectedChoiceId(choice.id);
+
+    const result = buildMultipleChoiceResult(currentQuestion, choice.id);
+    saveMockAnswerAndMoveNext(result);
   };
 
-  const recordCurrentAnswer = () => {
-    if (!currentQuestion) return null;
+  const handleMockUnansweredNext = () => {
+    if (!currentQuestion) return;
 
-    if (currentQuestion.type === "true_false") {
-      const isUnanswered = selectedAnswer === null;
-      const isCorrect =
-        !isUnanswered && selectedAnswer === currentQuestion.answer;
-      const score = getQuestionScore(currentQuestion, isCorrect, isUnanswered);
-
-      return {
-        questionId: currentQuestion.id,
-        type: currentQuestion.type,
-        selectedAnswer,
-        selectedChoiceId: null,
-        correctAnswer: currentQuestion.answer,
-        correctChoiceId: null,
-        isCorrect,
-        isUnanswered,
-        score,
-      };
-    }
-
-    if (currentQuestion.type === "multiple_choice") {
-      const correctChoice =
-        currentQuestion.choices.find((choice) => choice.isCorrect) ?? null;
-      const isUnanswered = selectedChoiceId === null;
-      const isCorrect = !isUnanswered && selectedChoiceId === correctChoice?.id;
-      const score = getQuestionScore(currentQuestion, isCorrect, isUnanswered);
-
-      return {
-        questionId: currentQuestion.id,
-        type: currentQuestion.type,
-        selectedAnswer: null,
-        selectedChoiceId,
-        correctAnswer: null,
-        correctChoiceId: correctChoice?.id ?? "",
-        isCorrect,
-        isUnanswered,
-        score,
-      };
-    }
-
-    return null;
+    const result = buildUnansweredResult(currentQuestion);
+    saveMockAnswerAndMoveNext(result);
   };
 
-  const handleMockNext = () => {
-    const result = recordCurrentAnswer();
+  const handleMockBack = () => {
+    if (currentIndex <= 0) return;
 
-    if (result) {
-      setResults((prev) => [...prev, result]);
-    }
-
-    setSelectedAnswer(null);
-    setSelectedChoiceId(null);
-    setIsAnswered(false);
-    setCurrentIndex((prev) => prev + 1);
-
-    if (result && currentIndex + 1 === activeQuestions.length) {
-      persistResults([...results, result], "mock_exam");
-    }
+    const previousIndex = currentIndex - 1;
+    setCurrentIndex(previousIndex);
+    restoreMockSelection(mockAnswerRecords[previousIndex]);
   };
 
   const handleWrongReviewAnswer = (result) => {
@@ -446,6 +474,7 @@ function App() {
     if (mode === "mock_exam") {
       resetPracticeState();
       setMockQuestions(shuffleArray(allQuestions));
+      setMockAnswerRecords([]);
       setStartedAt(new Date());
       return;
     }
@@ -656,9 +685,11 @@ function App() {
       displayChoices={displayChoices}
       selectedAnswer={selectedAnswer}
       selectedChoiceId={selectedChoiceId}
+      canGoBack={currentIndex > 0}
       onSelectTrueFalse={handleMockSelectTrueFalse}
       onSelectChoice={handleMockSelectChoice}
-      onNext={handleMockNext}
+      onUnansweredNext={handleMockUnansweredNext}
+      onBackQuestion={handleMockBack}
       onBackToMenu={backToMenu}
     />
   );
@@ -852,46 +883,21 @@ function WrongReviewScreen({
   const saveTrueFalseAnswer = (answer) => {
     if (isAnswered) return;
 
-    const isCorrect = answer === currentQuestion.answer;
-    const score = getQuestionScore(currentQuestion, isCorrect, false);
+    const result = buildTrueFalseResult(currentQuestion, answer);
 
     onSelectTrueFalse(answer);
     onSetIsAnswered(true);
-
-    onSaveResult({
-      questionId: currentQuestion.id,
-      type: currentQuestion.type,
-      selectedAnswer: answer,
-      selectedChoiceId: null,
-      correctAnswer: currentQuestion.answer,
-      correctChoiceId: null,
-      isCorrect,
-      isUnanswered: false,
-      score,
-    });
+    onSaveResult(result);
   };
 
   const saveChoiceAnswer = (choice) => {
     if (isAnswered) return;
 
-    const isCorrect = choice.isCorrect;
-    const score = getQuestionScore(currentQuestion, isCorrect, false);
+    const result = buildMultipleChoiceResult(currentQuestion, choice.id);
 
     onSelectChoice(choice.id);
     onSetIsAnswered(true);
-
-    onSaveResult({
-      questionId: currentQuestion.id,
-      type: currentQuestion.type,
-      selectedAnswer: null,
-      selectedChoiceId: choice.id,
-      correctAnswer: null,
-      correctChoiceId:
-        currentQuestion.choices.find((item) => item.isCorrect)?.id ?? "",
-      isCorrect,
-      isUnanswered: false,
-      score,
-    });
+    onSaveResult(result);
   };
 
   return (
@@ -1025,9 +1031,11 @@ function MockExamScreen({
   displayChoices,
   selectedAnswer,
   selectedChoiceId,
+  canGoBack,
   onSelectTrueFalse,
   onSelectChoice,
-  onNext,
+  onUnansweredNext,
+  onBackQuestion,
   onBackToMenu,
 }) {
   return (
@@ -1040,7 +1048,7 @@ function MockExamScreen({
             {currentIndex + 1} / {questions.length} 問
           </p>
           <p className="note">
-            本番模擬では回答直後の正誤・解説は表示しません。
+            本番模擬では、回答を選択すると自動で次の問題へ進みます。
           </p>
         </div>
 
@@ -1097,11 +1105,20 @@ function MockExamScreen({
         )}
 
         <div className="action-row">
-          <button type="button" className="button primary" onClick={onNext}>
-            {currentIndex + 1 === questions.length ? "採点する" : "次へ"}
+          <button
+            type="button"
+            className="button secondary"
+            onClick={onBackQuestion}
+            disabled={!canGoBack}
+          >
+            戻る
           </button>
 
-          <button type="button" className="button secondary" onClick={onNext}>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={onUnansweredNext}
+          >
             無回答で次へ
           </button>
         </div>
