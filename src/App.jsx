@@ -12,6 +12,11 @@ const SCORE_RULES = {
   },
 };
 
+const MOCK_EXAM_RULE = {
+  trueFalseCount: 60,
+  multipleChoiceCount: 10,
+};
+
 const STORAGE_KEY = "kikaiGakkaExamLearningHistory";
 
 const EMPTY_HISTORY = {
@@ -198,6 +203,55 @@ function buildUnansweredResult(question) {
   };
 }
 
+function buildMockExamQuestions(trueFalseQuestions, multipleChoiceQuestions) {
+  const targetTrueFalseQuestions = trueFalseQuestions.filter(
+    (question) => !question.isCalculation
+  );
+  const targetMultipleChoiceQuestions = multipleChoiceQuestions.filter(
+    (question) => !question.isCalculation
+  );
+
+  const canBuildFullMockExam =
+    targetTrueFalseQuestions.length >= MOCK_EXAM_RULE.trueFalseCount &&
+    targetMultipleChoiceQuestions.length >= MOCK_EXAM_RULE.multipleChoiceCount;
+
+  if (canBuildFullMockExam) {
+    const selectedTrueFalseQuestions = shuffleArray(
+      targetTrueFalseQuestions
+    ).slice(0, MOCK_EXAM_RULE.trueFalseCount);
+
+    const selectedMultipleChoiceQuestions = shuffleArray(
+      targetMultipleChoiceQuestions
+    ).slice(0, MOCK_EXAM_RULE.multipleChoiceCount);
+
+    return {
+      questions: shuffleArray([
+        ...selectedTrueFalseQuestions,
+        ...selectedMultipleChoiceQuestions,
+      ]),
+      isFullMockExam: true,
+    };
+  }
+
+  return {
+    questions: shuffleArray([
+      ...targetTrueFalseQuestions,
+      ...targetMultipleChoiceQuestions,
+    ]),
+    isFullMockExam: false,
+  };
+}
+
+function countQuestionsByType(questions) {
+  return {
+    trueFalse: questions.filter((question) => question.type === "true_false")
+      .length,
+    multipleChoice: questions.filter(
+      (question) => question.type === "multiple_choice"
+    ).length,
+  };
+}
+
 function App() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -213,6 +267,7 @@ function App() {
   const [practiceQuestions, setPracticeQuestions] = useState([]);
   const [mockQuestions, setMockQuestions] = useState([]);
   const [mockAnswerRecords, setMockAnswerRecords] = useState([]);
+  const [isFullMockExam, setIsFullMockExam] = useState(false);
   const [reviewQuestions, setReviewQuestions] = useState([]);
   const [mockReviewQuestions, setMockReviewQuestions] = useState([]);
 
@@ -258,6 +313,10 @@ function App() {
         question.type === "true_false" || question.type === "multiple_choice"
     );
   }, [data]);
+
+  const targetMockQuestionCount = useMemo(() => {
+    return allQuestions.filter((question) => !question.isCalculation).length;
+  }, [allQuestions]);
 
   const wrongQuestions = useMemo(() => {
     if (!allQuestions.length) return [];
@@ -357,6 +416,7 @@ function App() {
     setPracticeQuestions([]);
     setMockQuestions([]);
     setMockAnswerRecords([]);
+    setIsFullMockExam(false);
     setReviewQuestions([]);
     setMockReviewQuestions([]);
     setMode(setupMode);
@@ -399,6 +459,7 @@ function App() {
     setPracticeQuestions(configuredQuestions);
     setMockQuestions([]);
     setMockAnswerRecords([]);
+    setIsFullMockExam(false);
     setReviewQuestions([]);
     setMockReviewQuestions([]);
     setMode(practiceMode);
@@ -412,7 +473,13 @@ function App() {
     setStartedAt(new Date());
 
     if (nextMode === "mock_exam") {
-      setMockQuestions(shuffleArray(allQuestions));
+      const mockExam = buildMockExamQuestions(
+        trueFalseQuestions,
+        multipleChoiceQuestions
+      );
+
+      setMockQuestions(mockExam.questions);
+      setIsFullMockExam(mockExam.isFullMockExam);
       setMockAnswerRecords([]);
       setPracticeQuestions([]);
       setReviewQuestions([]);
@@ -422,11 +489,13 @@ function App() {
       setPracticeQuestions([]);
       setMockQuestions([]);
       setMockAnswerRecords([]);
+      setIsFullMockExam(false);
       setMockReviewQuestions([]);
     } else {
       setPracticeQuestions([]);
       setMockQuestions([]);
       setMockAnswerRecords([]);
+      setIsFullMockExam(false);
       setReviewQuestions([]);
       setMockReviewQuestions([]);
     }
@@ -440,6 +509,7 @@ function App() {
     setPracticeQuestions([]);
     setMockQuestions([]);
     setMockAnswerRecords([]);
+    setIsFullMockExam(false);
     setReviewQuestions([]);
     setStartedAt(new Date());
   };
@@ -450,6 +520,7 @@ function App() {
     setPracticeQuestions([]);
     setMockQuestions([]);
     setMockAnswerRecords([]);
+    setIsFullMockExam(false);
     setReviewQuestions([]);
     setMockReviewQuestions([]);
     setMode("menu");
@@ -551,8 +622,14 @@ function App() {
 
   const handleRestart = () => {
     if (mode === "mock_exam") {
+      const mockExam = buildMockExamQuestions(
+        trueFalseQuestions,
+        multipleChoiceQuestions
+      );
+
       resetPracticeState();
-      setMockQuestions(shuffleArray(allQuestions));
+      setMockQuestions(mockExam.questions);
+      setIsFullMockExam(mockExam.isFullMockExam);
       setMockAnswerRecords([]);
       setStartedAt(new Date());
       return;
@@ -619,6 +696,7 @@ function App() {
           <p>問題数：{data.questionCount}問</p>
           <p>○×問題：{trueFalseQuestions.length}問</p>
           <p>択一問題：{multipleChoiceQuestions.length}問</p>
+          <p>本番模擬対象問題：{targetMockQuestionCount}問</p>
           <p>誤答復習対象：{wrongQuestions.length}問</p>
 
           <div className="menu-buttons">
@@ -644,7 +722,7 @@ function App() {
               type="button"
               className="button primary"
               onClick={() => startMode("mock_exam")}
-              disabled={allQuestions.length === 0}
+              disabled={targetMockQuestionCount === 0}
             >
               本番模擬を開始
             </button>
@@ -684,7 +762,8 @@ function App() {
           <p>択一問題：正解 +0.4点、不正解 -0.4点、無回答 0点</p>
           <p>合計点がマイナスになった場合も、そのまま表示します。</p>
           <p className="note">
-            PoC版の本番模擬は、現在登録されている問題を全問出題します。最終版では70問構成に変更します。
+            本番模擬は、問題数が十分にある場合は○×60問・択一10問の70問構成で出題します。
+            問題数が不足している場合は、計算問題を除いた登録済み対象問題を全問出題します。
           </p>
         </section>
       </main>
@@ -833,6 +912,7 @@ function App() {
       questions={activeQuestions}
       currentQuestion={currentQuestion}
       displayChoices={displayChoices}
+      isFullMockExam={isFullMockExam}
       onSelectTrueFalse={handleMockSelectTrueFalse}
       onSelectChoice={handleMockSelectChoice}
       onUnansweredNext={handleMockUnansweredNext}
@@ -896,10 +976,18 @@ function PracticeSetupScreen({
         </p>
 
         <div className="setup-actions">
-          <button type="button" className="button secondary" onClick={selectAllCategories}>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={selectAllCategories}
+          >
             すべて選択
           </button>
-          <button type="button" className="button secondary" onClick={clearCategories}>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={clearCategories}
+          >
             選択解除
           </button>
         </div>
@@ -950,7 +1038,11 @@ function PracticeSetupScreen({
           演習開始
         </button>
 
-        <button type="button" className="button secondary" onClick={onBackToMenu}>
+        <button
+          type="button"
+          className="button secondary"
+          onClick={onBackToMenu}
+        >
           トップへ戻る
         </button>
       </div>
@@ -1292,14 +1384,17 @@ function MockExamScreen({
   questions,
   currentQuestion,
   displayChoices,
+  isFullMockExam,
   onSelectTrueFalse,
   onSelectChoice,
   onUnansweredNext,
   onBackToMenu,
 }) {
+  const typeCounts = countQuestionsByType(questions);
+
   return (
     <main className="container">
-      <h1>本番模擬 PoC</h1>
+      <h1>本番模擬</h1>
 
       <section className="card">
         <div className="mock-header">
@@ -1309,6 +1404,20 @@ function MockExamScreen({
           <p className="note">
             本番模擬では、回答を選択すると自動で次の問題へ進みます。
           </p>
+        </div>
+
+        <div className="question-meta">
+          <p>
+            出題構成：
+            {isFullMockExam
+              ? "70問構成（○×60問・択一10問）"
+              : "問題数不足のため、対象問題を全問出題"}
+          </p>
+          <p>
+            ○×：{typeCounts.trueFalse}問 ／ 択一：
+            {typeCounts.multipleChoice}問
+          </p>
+          <p>計算問題は出題対象外です。</p>
         </div>
 
         <QuestionMeta question={currentQuestion} />
