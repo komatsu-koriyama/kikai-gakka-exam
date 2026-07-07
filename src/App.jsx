@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
+const SHOW_DEBUG_INFO = false;
+
 const SCORE_RULES = {
   true_false: {
     correct: 0.2,
@@ -663,7 +665,7 @@ function App() {
   if (error) {
     return (
       <main className="container">
-        <h1>学科試験演習アプリ PoC</h1>
+        <h1>学科試験演習アプリ</h1>
         <p className="error">{error}</p>
       </main>
     );
@@ -672,7 +674,7 @@ function App() {
   if (!data) {
     return (
       <main className="container">
-        <h1>学科試験演習アプリ PoC</h1>
+        <h1>学科試験演習アプリ</h1>
         <p>読み込み中...</p>
       </main>
     );
@@ -686,18 +688,21 @@ function App() {
 
     return (
       <main className="container">
-        <h1>学科試験演習アプリ PoC</h1>
+        <h1>学科試験演習アプリ</h1>
 
         <section className="card">
-          <h2>演習モード選択</h2>
-          <p>
-            現在のPoCでは、○×演習、択一演習、本番模擬、誤答復習を実装しています。
-          </p>
-          <p>問題数：{data.questionCount}問</p>
-          <p>○×問題：{trueFalseQuestions.length}問</p>
-          <p>択一問題：{multipleChoiceQuestions.length}問</p>
-          <p>本番模擬対象問題：{targetMockQuestionCount}問</p>
-          <p>誤答復習対象：{wrongQuestions.length}問</p>
+          <h2>演習メニュー</h2>
+          <p>目的に合わせて演習モードを選択してください。</p>
+
+          {SHOW_DEBUG_INFO && (
+            <div className="debug-box">
+              <p>問題数：{data.questionCount}問</p>
+              <p>○×問題：{trueFalseQuestions.length}問</p>
+              <p>択一問題：{multipleChoiceQuestions.length}問</p>
+              <p>本番模擬対象問題：{targetMockQuestionCount}問</p>
+              <p>誤答復習対象：{wrongQuestions.length}問</p>
+            </div>
+          )}
 
           <div className="menu-buttons">
             <button
@@ -706,7 +711,7 @@ function App() {
               onClick={() => openPracticeSetup("true_false_setup")}
               disabled={trueFalseQuestions.length === 0}
             >
-              ○×演習を開始
+              ○×演習
             </button>
 
             <button
@@ -715,7 +720,7 @@ function App() {
               onClick={() => openPracticeSetup("multiple_choice_setup")}
               disabled={multipleChoiceQuestions.length === 0}
             >
-              択一演習を開始
+              択一演習
             </button>
 
             <button
@@ -724,7 +729,7 @@ function App() {
               onClick={() => startMode("mock_exam")}
               disabled={targetMockQuestionCount === 0}
             >
-              本番模擬を開始
+              本番模擬
             </button>
 
             <button
@@ -733,7 +738,7 @@ function App() {
               onClick={() => startMode("wrong_review")}
               disabled={wrongQuestions.length === 0}
             >
-              誤答復習を開始
+              誤答復習
             </button>
           </div>
         </section>
@@ -743,7 +748,7 @@ function App() {
           <p>総回答回数：{totalAttempts}回</p>
           <p>誤答復習対象：{wrongQuestions.length}問</p>
           <p className="note">
-            不正解または無回答の問題は誤答復習対象になります。誤答復習で2回連続正解すると克服扱いになり、復習対象から外れます。
+            不正解または無回答の問題は誤答復習対象になります。誤答復習で2回連続正解すると復習対象から外れます。
           </p>
 
           <button
@@ -761,10 +766,6 @@ function App() {
           <p>○×問題：正解 +0.2点、不正解 -0.2点、無回答 0点</p>
           <p>択一問題：正解 +0.4点、不正解 -0.4点、無回答 0点</p>
           <p>合計点がマイナスになった場合も、そのまま表示します。</p>
-          <p className="note">
-            本番模擬は、問題数が十分にある場合は○×60問・択一10問の70問構成で出題します。
-            問題数が不足している場合は、計算問題を除いた登録済み対象問題を全問出題します。
-          </p>
         </section>
       </main>
     );
@@ -864,7 +865,7 @@ function App() {
     return (
       <ReviewPracticeScreen
         title="誤答復習"
-        note="このモードで2回連続正解した問題は、克服扱いで誤答復習対象から外れます。"
+        note="2回連続で正解すると、復習対象から外れます。"
         currentIndex={currentIndex}
         questions={activeQuestions}
         currentQuestion={currentQuestion}
@@ -886,7 +887,7 @@ function App() {
     return (
       <ReviewPracticeScreen
         title="今回間違えた問題の復習"
-        note="直前の本番模擬で不正解または無回答だった問題だけを復習します。"
+        note="直前の本番模擬で不正解または無回答だった問題を復習します。"
         currentIndex={currentIndex}
         questions={activeQuestions}
         currentQuestion={currentQuestion}
@@ -1166,10 +1167,12 @@ function MultipleChoicePracticeScreen({
           label={`${currentQuestion.id}の問題画像`}
         />
 
-        <div className="shuffle-info">
-          選択肢シャッフル：
-          {currentQuestion.shuffleChoices ? "有効" : "無効"}
-        </div>
+        {SHOW_DEBUG_INFO && (
+          <div className="debug-box">
+            選択肢シャッフル：
+            {currentQuestion.shuffleChoices ? "有効" : "無効"}
+          </div>
+        )}
 
         <ChoiceButtons
           displayChoices={displayChoices}
@@ -1185,11 +1188,6 @@ function MultipleChoicePracticeScreen({
             }
           >
             <p>{selectedChoice?.isCorrect ? "正解" : "不正解"}</p>
-
-            <p>
-              正解：元ID{" "}
-              {currentQuestion.choices.find((choice) => choice.isCorrect)?.id}
-            </p>
 
             {currentQuestion.explanation && (
               <p>総合解説：{currentQuestion.explanation}</p>
@@ -1300,10 +1298,12 @@ function ReviewPracticeScreen({
 
         {currentQuestion.type === "multiple_choice" && (
           <>
-            <div className="shuffle-info">
-              選択肢シャッフル：
-              {currentQuestion.shuffleChoices ? "有効" : "無効"}
-            </div>
+            {SHOW_DEBUG_INFO && (
+              <div className="debug-box">
+                選択肢シャッフル：
+                {currentQuestion.shuffleChoices ? "有効" : "無効"}
+              </div>
+            )}
 
             <ChoiceButtons
               displayChoices={displayChoices}
@@ -1338,13 +1338,6 @@ function ReviewPracticeScreen({
 
             {currentQuestion.type === "true_false" && (
               <p>正解：{formatTrueFalse(currentQuestion.answer)}</p>
-            )}
-
-            {currentQuestion.type === "multiple_choice" && (
-              <p>
-                正解：元ID{" "}
-                {currentQuestion.choices.find((choice) => choice.isCorrect)?.id}
-              </p>
             )}
 
             {currentQuestion.explanation && (
@@ -1401,24 +1394,23 @@ function MockExamScreen({
           <p className="progress">
             {currentIndex + 1} / {questions.length} 問
           </p>
-          <p className="note">
-            本番模擬では、回答を選択すると自動で次の問題へ進みます。
-          </p>
+          <p className="note">回答を選択すると、自動で次の問題へ進みます。</p>
         </div>
 
-        <div className="question-meta">
-          <p>
-            出題構成：
-            {isFullMockExam
-              ? "70問構成（○×60問・択一10問）"
-              : "問題数不足のため、対象問題を全問出題"}
-          </p>
-          <p>
-            ○×：{typeCounts.trueFalse}問 ／ 択一：
-            {typeCounts.multipleChoice}問
-          </p>
-          <p>計算問題は出題対象外です。</p>
-        </div>
+        {SHOW_DEBUG_INFO && (
+          <div className="debug-box">
+            <p>
+              出題構成：
+              {isFullMockExam
+                ? "70問構成（○×60問・択一10問）"
+                : "問題数不足のため、対象問題を全問出題"}
+            </p>
+            <p>
+              ○×：{typeCounts.trueFalse}問 ／ 択一：
+              {typeCounts.multipleChoice}問
+            </p>
+          </div>
+        )}
 
         <QuestionMeta question={currentQuestion} />
 
@@ -1450,10 +1442,12 @@ function MockExamScreen({
 
         {currentQuestion.type === "multiple_choice" && (
           <>
-            <div className="shuffle-info">
-              選択肢シャッフル：
-              {currentQuestion.shuffleChoices ? "有効" : "無効"}
-            </div>
+            {SHOW_DEBUG_INFO && (
+              <div className="debug-box">
+                選択肢シャッフル：
+                {currentQuestion.shuffleChoices ? "有効" : "無効"}
+              </div>
+            )}
 
             <ChoiceButtons
               displayChoices={displayChoices}
@@ -1517,7 +1511,9 @@ function ChoiceButtons({
           >
             <span className="display-label">{displayLabel}</span>
             <span>{choice.text}</span>
-            <span className="original-id">元ID：{choice.id}</span>
+            {SHOW_DEBUG_INFO && (
+              <span className="original-id">元ID：{choice.id}</span>
+            )}
           </button>
         );
       })}
@@ -1734,7 +1730,8 @@ function ChoiceExplanations({ choices }) {
         {choices.map((choice) => (
           <li key={choice.id}>
             <strong>
-              元ID {choice.id}. {choice.text}
+              {SHOW_DEBUG_INFO && `元ID ${choice.id}. `}
+              {choice.text}
             </strong>
             <br />
             {choice.explanation || "解説なし"}
@@ -1758,12 +1755,21 @@ function QuestionImage({ src, label }) {
 function QuestionMeta({ question }) {
   return (
     <div className="question-meta">
-      <p>ID：{question.id}</p>
-      <p>形式：{question.type === "true_false" ? "○×" : "択一"}</p>
-      <p>カテゴリ：{question.category ?? "未設定"}</p>
-      <p>サブカテゴリ：{question.subCategory ?? "未設定"}</p>
+      {SHOW_DEBUG_INFO && (
+        <>
+          <p>ID：{question.id}</p>
+          <p>形式：{question.type === "true_false" ? "○×" : "択一"}</p>
+        </>
+      )}
 
-      {question.tags?.length > 0 && <p>タグ：{question.tags.join("、")}</p>}
+      <p>カテゴリ：{question.category ?? "未設定"}</p>
+
+      {SHOW_DEBUG_INFO && (
+        <>
+          <p>サブカテゴリ：{question.subCategory ?? "未設定"}</p>
+          {question.tags?.length > 0 && <p>タグ：{question.tags.join("、")}</p>}
+        </>
+      )}
     </div>
   );
 }
