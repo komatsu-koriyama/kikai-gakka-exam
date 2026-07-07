@@ -7,7 +7,7 @@ from openpyxl import load_workbook
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 
-INPUT_EXCEL = BASE_DIR / "data" /"question_master_test_1.xlsx"
+INPUT_EXCEL = BASE_DIR / "data" / "question_master_test_1.xlsx"
 OUTPUT_JSON = BASE_DIR / "public" / "data" / "questions.json"
 SHEET_NAME = "問題マスター"
 
@@ -21,6 +21,7 @@ REQUIRED_COLUMNS = [
     "subCategory",
     "tags",
     "question",
+    "imageFile",
     "choiceA",
     "choiceB",
     "choiceC",
@@ -31,6 +32,7 @@ REQUIRED_COLUMNS = [
     "choiceDExplanation",
     "answer",
     "explanation",
+    "explanationImageFile",
     "difficulty",
     "isCalculation",
     "shuffleChoices",
@@ -64,8 +66,10 @@ def to_bool(value, default=False):
 
     if isinstance(value, str):
         text = value.strip().lower()
+
         if text in ["true", "t", "yes", "y", "1", "○", "〇"]:
             return True
+
         if text in ["false", "f", "no", "n", "0", "×", "x"]:
             return False
 
@@ -78,9 +82,24 @@ def split_tags(value):
     if not value:
         return []
 
-    # カンマ、読点、全角カンマのどれでも区切れるようにする
     text = str(value).replace("、", ",").replace("，", ",")
     return [tag.strip() for tag in text.split(",") if tag.strip()]
+
+
+def build_image_path(value):
+    value = normalize_value(value)
+
+    if not value:
+        return None
+
+    file_name = str(value).strip()
+
+    # Excel側では i-ks-001 / e-ks-001 のように拡張子なしで入力する想定。
+    # 拡張子がない場合は .png を補完する。
+    if "." not in file_name:
+        file_name = f"{file_name}.png"
+
+    return f"/images/{file_name}"
 
 
 def get_cell(row_dict, column_name):
@@ -91,9 +110,7 @@ def validate_headers(headers):
     missing = [col for col in REQUIRED_COLUMNS if col not in headers]
 
     if missing:
-        raise ValueError(
-            "Excelに必要な列がありません: " + ", ".join(missing)
-        )
+        raise ValueError("Excelに必要な列がありません: " + ", ".join(missing))
 
 
 def build_true_false_question(row):
@@ -120,29 +137,11 @@ def build_true_false_question(row):
         "subCategory": get_cell(row, "subCategory") or None,
         "tags": split_tags(get_cell(row, "tags")),
         "question": get_cell(row, "question"),
+        "image": build_image_path(get_cell(row, "imageFile")),
         "choices": None,
         "answer": answer_bool,
         "explanation": get_cell(row, "explanation"),
-        "difficulty": get_cell(row, "difficulty") or "normal",
-        "isCalculation": to_bool(get_cell(row, "isCalculation")),
-        "shuffleChoices": False,
-        "isActive": True,
-        "version": int(get_cell(row, "version") or 1),
-        "lastUpdated": get_cell(row, "lastUpdated"),
-    }
-
-    return {
-        "id": get_cell(row, "id"),
-        "source": get_cell(row, "source"),
-        "sourceQuestionNo": str(get_cell(row, "sourceQuestionNo")),
-        "type": "true_false",
-        "category": get_cell(row, "category") or None,
-        "subCategory": get_cell(row, "subCategory") or None,
-        "tags": split_tags(get_cell(row, "tags")),
-        "question": get_cell(row, "question"),
-        "choices": None,
-        "answer": answer_value == "true",
-        "explanation": get_cell(row, "explanation"),
+        "explanationImage": build_image_path(get_cell(row, "explanationImageFile")),
         "difficulty": get_cell(row, "difficulty") or "normal",
         "isCalculation": to_bool(get_cell(row, "isCalculation")),
         "shuffleChoices": False,
@@ -153,7 +152,7 @@ def build_true_false_question(row):
 
 
 def build_multiple_choice_question(row):
-    answer = get_cell(row, "answer").upper()
+    answer = str(get_cell(row, "answer")).strip().upper()
 
     if answer not in ["A", "B", "C", "D"]:
         raise ValueError(
@@ -189,9 +188,11 @@ def build_multiple_choice_question(row):
         "subCategory": get_cell(row, "subCategory") or None,
         "tags": split_tags(get_cell(row, "tags")),
         "question": get_cell(row, "question"),
+        "image": build_image_path(get_cell(row, "imageFile")),
         "choices": choices,
         "answer": answer,
         "explanation": get_cell(row, "explanation"),
+        "explanationImage": build_image_path(get_cell(row, "explanationImageFile")),
         "difficulty": get_cell(row, "difficulty") or "normal",
         "isCalculation": to_bool(get_cell(row, "isCalculation")),
         "shuffleChoices": to_bool(get_cell(row, "shuffleChoices"), default=True),
@@ -253,25 +254,29 @@ def main():
         if not to_bool(get_cell(row, "isActive"), default=False):
             continue
 
-        validate_question_common(row)
+        try:
+            validate_question_common(row)
 
-        question_id = get_cell(row, "id")
+            question_id = get_cell(row, "id")
 
-        if question_id in seen_ids:
-            raise ValueError(f"id が重複しています: {question_id}")
+            if question_id in seen_ids:
+                raise ValueError(f"id が重複しています: {question_id}")
 
-        seen_ids.add(question_id)
+            seen_ids.add(question_id)
 
-        question_type = get_cell(row, "type")
+            question_type = get_cell(row, "type")
 
-        if question_type == "true_false":
-            question = build_true_false_question(row)
-        elif question_type == "multiple_choice":
-            question = build_multiple_choice_question(row)
-        else:
-            raise ValueError(f"{question_id}: 未対応のtypeです: {question_type}")
+            if question_type == "true_false":
+                question = build_true_false_question(row)
+            elif question_type == "multiple_choice":
+                question = build_multiple_choice_question(row)
+            else:
+                raise ValueError(f"{question_id}: 未対応のtypeです: {question_type}")
 
-        questions.append(question)
+            questions.append(question)
+
+        except Exception as exc:
+            raise ValueError(f"Excel {row_number} 行目でエラー: {exc}") from exc
 
     output = {
         "schemaVersion": 1,

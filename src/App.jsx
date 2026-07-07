@@ -65,7 +65,9 @@ function App() {
   const currentQuestion = activeQuestions[currentIndex];
 
   const isFinished =
-    mode !== "menu" && activeQuestions.length > 0 && currentIndex >= activeQuestions.length;
+    mode !== "menu" &&
+    activeQuestions.length > 0 &&
+    currentIndex >= activeQuestions.length;
 
   useEffect(() => {
     if (mode !== "multiple_choice" || !currentQuestion?.choices) {
@@ -269,13 +271,25 @@ function App() {
                       {result.isCorrect ? "正解" : "不正解"}
                     </p>
                     <p>問題文：{question.question}</p>
+
+                    <QuestionImage
+                      src={question.image}
+                      label={`${question.id}の問題画像`}
+                    />
+
                     <p>
                       あなたの回答：{formatTrueFalse(result.selectedAnswer)} ／
                       正解：{formatTrueFalse(result.correctAnswer)}
                     </p>
+
                     {question.explanation && (
                       <p>解説：{question.explanation}</p>
                     )}
+
+                    <QuestionImage
+                      src={question.explanationImage}
+                      label={`${question.id}の解説画像`}
+                    />
                   </li>
                 );
               }
@@ -294,6 +308,12 @@ function App() {
                     {result.isCorrect ? "正解" : "不正解"}
                   </p>
                   <p>問題文：{question.question}</p>
+
+                  <QuestionImage
+                    src={question.image}
+                    label={`${question.id}の問題画像`}
+                  />
+
                   <p>
                     あなたの回答：{result.selectedChoiceId}.{" "}
                     {selectedChoice?.text}
@@ -306,12 +326,19 @@ function App() {
                     <p>総合解説：{question.explanation}</p>
                   )}
 
+                  <QuestionImage
+                    src={question.explanationImage}
+                    label={`${question.id}の解説画像`}
+                  />
+
                   <div className="choice-explanations">
                     <p>選択肢ごとの解説：</p>
                     <ul>
                       {question.choices.map((choice) => (
                         <li key={choice.id}>
-                          <strong>{choice.id}. {choice.text}</strong>
+                          <strong>
+                            {choice.id}. {choice.text}
+                          </strong>
                           <br />
                           {choice.explanation || "解説なし"}
                         </li>
@@ -350,6 +377,11 @@ function App() {
 
           <h2 className="question-text">{currentQuestion.question}</h2>
 
+          <QuestionImage
+            src={currentQuestion.image}
+            label={`${currentQuestion.id}の問題画像`}
+          />
+
           <div className="answer-buttons">
             <button
               type="button"
@@ -386,6 +418,11 @@ function App() {
                 <p>解説：{currentQuestion.explanation}</p>
               )}
 
+              <QuestionImage
+                src={currentQuestion.explanationImage}
+                label={`${currentQuestion.id}の解説画像`}
+              />
+
               <button type="button" className="button" onClick={handleNext}>
                 {currentIndex + 1 === activeQuestions.length
                   ? "結果を見る"
@@ -414,6 +451,11 @@ function App() {
         <QuestionMeta question={currentQuestion} />
 
         <h2 className="question-text">{currentQuestion.question}</h2>
+
+        <QuestionImage
+          src={currentQuestion.image}
+          label={`${currentQuestion.id}の問題画像`}
+        />
 
         <div className="shuffle-info">
           選択肢シャッフル：
@@ -477,6 +519,11 @@ function App() {
               <p>総合解説：{currentQuestion.explanation}</p>
             )}
 
+            <QuestionImage
+              src={currentQuestion.explanationImage}
+              label={`${currentQuestion.id}の解説画像`}
+            />
+
             <div className="choice-explanations">
               <p>選択肢ごとの解説：</p>
               <ul>
@@ -505,6 +552,16 @@ function App() {
         </button>
       </section>
     </main>
+  );
+}
+
+function QuestionImage({ src, label }) {
+  if (!src) return null;
+
+  return (
+    <div className="question-image-wrapper">
+      <img src={src} alt={label} className="question-image" />
+    </div>
   );
 }
 
