@@ -25,8 +25,26 @@ h2 {
   background: #fff;
 }
 
+.menu-buttons {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
 .progress {
   font-weight: bold;
+}
+
+.question-meta {
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 8px;
+  background: #f7f7f7;
+}
+
+.question-meta p {
+  margin: 4px 0;
 }
 
 .question-text {
@@ -53,10 +71,93 @@ h2 {
   opacity: 0.6;
 }
 
+.choice-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.choice-button {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.choice-button:disabled {
+  cursor: not-allowed;
+}
+
+.display-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #eee;
+  font-weight: bold;
+}
+
+.original-id {
+  color: #666;
+  font-size: 13px;
+}
+
+.selected-correct {
+  border-color: #2e7d32;
+  background: #f1f8f1;
+}
+
+.selected-wrong {
+  border-color: #c62828;
+  background: #fff5f5;
+}
+
+.correct-choice {
+  border-color: #2e7d32;
+}
+
 .button {
   padding: 10px 20px;
   margin-top: 16px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: #fff;
   font-size: 16px;
+  cursor: pointer;
+}
+
+.button.primary {
+  background: #222;
+  color: #fff;
+}
+
+.button.secondary {
+  background: #f5f5f5;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.text-button {
+  display: inline-block;
+  margin-top: 20px;
+  border: none;
+  background: transparent;
+  color: #333;
+  text-decoration: underline;
   cursor: pointer;
 }
 
@@ -77,14 +178,34 @@ h2 {
 }
 
 .review-item {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+}
+
+.choice-explanations {
+  margin-top: 16px;
+}
+
+.choice-explanations ul {
+  padding-left: 20px;
+}
+
+.choice-explanations li {
+  margin-bottom: 12px;
+}
+
+.shuffle-info {
+  margin: 12px 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.action-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .error {
   color: red;
   font-weight: bold;
-}
-
-.note {
-  font-size: 14px;
 }
