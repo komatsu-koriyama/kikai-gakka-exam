@@ -1,13 +1,13 @@
 import json
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime, date, time
 
 from openpyxl import load_workbook
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 
-INPUT_EXCEL = BASE_DIR / "data" / "question_master_test_1.xlsx"
+INPUT_EXCEL = BASE_DIR / "data" / "question_master.xlsx"
 OUTPUT_JSON = BASE_DIR / "public" / "data" / "questions.json"
 SHEET_NAME = "問題マスター"
 
@@ -49,10 +49,16 @@ def normalize_value(value):
     if isinstance(value, str):
         return value.strip()
 
-    if isinstance(value, (datetime, date)):
+    if isinstance(value, datetime):
+        return value.strftime("%Y/%m/%d %H:%M:%S")
+
+    if isinstance(value, date):
         return value.strftime("%Y/%m/%d")
 
-    return value
+    if isinstance(value, time):
+        return value.strftime("%H:%M:%S")
+
+    return str(value)
 
 
 def to_bool(value, default=False):
@@ -115,18 +121,14 @@ def validate_headers(headers):
 
 def build_true_false_question(row):
     raw_answer = get_cell(row, "answer")
+    answer_text = str(raw_answer).strip().lower()
 
-    if isinstance(raw_answer, bool):
-        answer_bool = raw_answer
-    else:
-        answer_text = str(raw_answer).strip().lower()
+    if answer_text not in ["true", "false"]:
+        raise ValueError(
+            f"{get_cell(row, 'id')}: true_false問題のanswerは true または false にしてください。"
+        )
 
-        if answer_text not in ["true", "false"]:
-            raise ValueError(
-                f"{get_cell(row, 'id')}: true_false問題のanswerは true または false にしてください。"
-            )
-
-        answer_bool = answer_text == "true"
+    answer_bool = answer_text == "true"
 
     return {
         "id": get_cell(row, "id"),
