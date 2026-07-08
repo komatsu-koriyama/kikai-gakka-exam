@@ -1225,6 +1225,7 @@ function TrueFalsePracticeScreen({
                 : "result wrong"
             }
           >
+            <p className="result-question-id">問題ID：{currentQuestion.id}</p>
             <p>
               {selectedAnswer === currentQuestion.answer ? "正解" : "不正解"}
             </p>
@@ -1306,6 +1307,7 @@ function MultipleChoicePracticeScreen({
               selectedChoice?.isCorrect ? "result correct" : "result wrong"
             }
           >
+            <p className="result-question-id">問題ID：{currentQuestion.id}</p>
             <p>{selectedChoice?.isCorrect ? "正解" : "不正解"}</p>
 
             {currentQuestion.explanation && (
@@ -1445,6 +1447,7 @@ function ReviewPracticeScreen({
                 : "result wrong"
             }
           >
+            <p className="result-question-id">問題ID：{currentQuestion.id}</p>
             <p>
               {currentQuestion.type === "true_false"
                 ? selectedAnswer === currentQuestion.answer
@@ -1531,7 +1534,7 @@ function MockExamScreen({
           </div>
         )}
 
-        <QuestionMeta question={currentQuestion} />
+        <QuestionMeta question={currentQuestion} showCategory={false} />
 
         <h2 className="question-text">{currentQuestion.question}</h2>
 
@@ -1741,9 +1744,14 @@ function ResultScreen({
         <ol>
           {results.map((result, index) => {
             const question = questions[index];
+            const reviewClassName = result.isCorrect
+              ? "review-item"
+              : result.isUnanswered
+              ? "review-item review-item-unanswered"
+              : "review-item review-item-wrong";
 
             return (
-              <li key={`${result.questionId}-${index}`} className="review-item">
+              <li key={`${result.questionId}-${index}`} className={reviewClassName}>
                 <ReviewResult question={question} result={result} />
               </li>
             );
@@ -1778,7 +1786,18 @@ function ReviewResult({ question, result }) {
     return (
       <>
         <p>
-          <strong>{question.id}</strong>：{statusText}
+          <strong>{question.id}</strong>：
+          <span
+            className={
+              result.isCorrect
+                ? "review-status review-status-correct"
+                : result.isUnanswered
+                ? "review-status review-status-unanswered"
+                : "review-status review-status-wrong"
+            }
+          >
+            {statusText}
+          </span>
         </p>
         <p>問題文：{question.question}</p>
 
@@ -1810,7 +1829,18 @@ function ReviewResult({ question, result }) {
   return (
     <>
       <p>
-        <strong>{question.id}</strong>：{statusText}
+        <strong>{question.id}</strong>：
+        <span
+          className={
+            result.isCorrect
+              ? "review-status review-status-correct"
+              : result.isUnanswered
+              ? "review-status review-status-unanswered"
+              : "review-status review-status-wrong"
+          }
+        >
+          {statusText}
+        </span>
       </p>
       <p>問題文：{question.question}</p>
 
@@ -1871,19 +1901,26 @@ function QuestionImage({ src, label }) {
   );
 }
 
-function QuestionMeta({ question }) {
+function QuestionMeta({ question, showCategory = true }) {
+  const shouldShowDebugInfo = SHOW_DEBUG_INFO;
+  const shouldShowCategory = showCategory;
+
+  if (!shouldShowDebugInfo && !shouldShowCategory) {
+    return null;
+  }
+
   return (
     <div className="question-meta">
-      {SHOW_DEBUG_INFO && (
+      {shouldShowDebugInfo && (
         <>
           <p>ID：{question.id}</p>
           <p>形式：{question.type === "true_false" ? "○×" : "択一"}</p>
         </>
       )}
 
-      <p>カテゴリ：{question.category ?? "未設定"}</p>
+      {shouldShowCategory && <p>カテゴリ：{question.category ?? "未設定"}</p>}
 
-      {SHOW_DEBUG_INFO && (
+      {shouldShowDebugInfo && (
         <>
           <p>サブカテゴリ：{question.subCategory ?? "未設定"}</p>
           {question.tags?.length > 0 && <p>タグ：{question.tags.join("、")}</p>}
