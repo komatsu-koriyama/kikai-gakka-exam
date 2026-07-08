@@ -29,7 +29,7 @@ function App() {
   const [history, setHistory] = useState(() => loadHistory());
 
   const [setupType, setSetupType] = useState(null);
-  const [setupCategory, setSetupCategory] = useState("all");
+  const [setupCategories, setSetupCategories] = useState([]);
   const [setupCount, setSetupCount] = useState(10);
 
   const [sessionQuestions, setSessionQuestions] = useState([]);
@@ -120,15 +120,36 @@ function App() {
 
   function openSetup(type) {
     setSetupType(type);
-    setSetupCategory("all");
+    setSetupCategories([]);
     setSetupCount(10);
     setScreen("setup");
   }
 
+  function toggleSetupCategory(category) {
+    setSetupCategories((prev) => {
+      if (prev.includes(category)) {
+        return prev.filter((item) => item !== category);
+      }
+
+      return [...prev, category];
+    });
+  }
+
+  function clearSetupCategories() {
+    setSetupCategories([]);
+  }
+
   function startPracticeFromSetup() {
+    const selectedCategorySet = new Set(setupCategories);
+
     const pool = questions.filter((question) => {
       if (question.type !== setupType) return false;
-      if (setupCategory !== "all" && normalizeText(question.category) !== setupCategory) return false;
+
+      if (selectedCategorySet.size > 0) {
+        const category = normalizeText(question.category);
+        if (!selectedCategorySet.has(category)) return false;
+      }
+
       return true;
     });
 
@@ -490,6 +511,21 @@ function App() {
     });
   }, [questions, questionListFilters]);
 
+  const setupQuestionCount = useMemo(() => {
+    const selectedCategorySet = new Set(setupCategories);
+
+    return questions.filter((question) => {
+      if (question.type !== setupType) return false;
+
+      if (selectedCategorySet.size > 0) {
+        const category = normalizeText(question.category);
+        if (!selectedCategorySet.has(category)) return false;
+      }
+
+      return true;
+    }).length;
+  }, [questions, setupType, setupCategories]);
+
   if (loadState.loading) {
     return (
       <div className="app-shell">
@@ -541,15 +577,12 @@ function App() {
       {screen === "setup" && (
         <SetupScreen
           setupType={setupType}
-          setupCategory={setupCategory}
+          setupCategories={setupCategories}
           setupCount={setupCount}
           categories={categories}
-          questionCount={questions.filter((question) => {
-            if (question.type !== setupType) return false;
-            if (setupCategory !== "all" && normalizeText(question.category) !== setupCategory) return false;
-            return true;
-          }).length}
-          onCategoryChange={setSetupCategory}
+          questionCount={setupQuestionCount}
+          onToggleCategory={toggleSetupCategory}
+          onClearCategories={clearSetupCategories}
           onCountChange={setSetupCount}
           onStart={startPracticeFromSetup}
           onBack={backToMenu}
@@ -702,16 +735,18 @@ function MenuScreen({
 
 function SetupScreen({
   setupType,
-  setupCategory,
+  setupCategories,
   setupCount,
   categories,
   questionCount,
-  onCategoryChange,
+  onToggleCategory,
+  onClearCategories,
   onCountChange,
   onStart,
   onBack,
 }) {
   const title = setupType === "true_false" ? "○×演習" : "択一演習";
+  const isAllSelected = setupCategories.length === 0;
 
   return (
     <main className="screen">
@@ -726,17 +761,45 @@ function SetupScreen({
       </div>
 
       <section className="panel">
-        <label className="form-field">
-          <span>カテゴリ</span>
-          <select value={setupCategory} onChange={(event) => onCategoryChange(event.target.value)}>
-            <option value="all">すべて</option>
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="category-select-panel">
+          <div className="category-select-header">
+            <div>
+              <h3>カテゴリ</h3>
+              <p className="muted-text">
+                複数選択できます。未選択の場合は、すべてのカテゴリから出題します。
+              </p>
+            </div>
+
+            <button className="ghost-button small" onClick={onClearCategories} disabled={isAllSelected}>
+              すべてに戻す
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className={`category-all-button ${isAllSelected ? "active" : ""}`}
+            onClick={onClearCategories}
+          >
+            すべてのカテゴリ
+          </button>
+
+          <div className="category-checkbox-grid">
+            {categories.map((category) => {
+              const checked = setupCategories.includes(category);
+
+              return (
+                <label key={category} className={`category-check-button ${checked ? "checked" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggleCategory(category)}
+                  />
+                  <span>{category}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
 
         <label className="form-field">
           <span>出題数</span>
@@ -751,6 +814,11 @@ function SetupScreen({
 
         <div className="setup-status">
           対象問題数：<strong>{questionCount}</strong> 問
+          {setupCategories.length > 0 && (
+            <span className="selected-category-summary">
+              選択中：{setupCategories.length}カテゴリ
+            </span>
+          )}
         </div>
 
         <button className="wide-button primary" onClick={onStart} disabled={questionCount === 0}>

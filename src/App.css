@@ -335,6 +335,85 @@ button:disabled {
   color: #172033;
 }
 
+.selected-category-summary {
+  display: inline-block;
+  margin-left: 12px;
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.category-select-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.category-select-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.category-select-header h3 {
+  margin: 0 0 4px;
+}
+
+.category-select-header p {
+  margin: 0;
+}
+
+.category-all-button {
+  min-height: 46px;
+  border: 1px solid #cdd8e8;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #172033;
+  font-weight: 800;
+}
+
+.category-all-button.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.category-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.category-check-button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  border: 1px solid #d9e2ef;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #344054;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.category-check-button input {
+  width: 18px;
+  height: 18px;
+}
+
+.category-check-button.checked {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -797,7 +876,8 @@ tr:last-child td {
   }
 
   .menu-grid,
-  .filter-grid {
+  .filter-grid,
+  .category-checkbox-grid {
     grid-template-columns: 1fr;
   }
 
@@ -809,7 +889,8 @@ tr:last-child td {
   .page-title-row,
   .practice-top-bar,
   .question-list-head,
-  .result-list-header {
+  .result-list-header,
+  .category-select-header {
     flex-direction: column;
     align-items: stretch;
   }
@@ -834,6 +915,12 @@ tr:last-child td {
 
   .tf-button {
     min-height: 88px;
+  }
+
+  .selected-category-summary {
+    display: block;
+    margin-top: 6px;
+    margin-left: 0;
   }
 }
 
