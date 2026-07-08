@@ -10,14 +10,40 @@ const MULTIPLE_CHOICE_SCORE = 0.4;
 
 const LOW_ACCURACY_THRESHOLD = 70;
 
+const APP_VERSION = "0.7.0";
+const APP_UPDATED_AT = "2026-07-08";
+const APP_SPEC_NOTE = "計算問題は現段階では除外";
+
 const DEFAULT_HISTORY = {
   questionStats: {},
   wrongQuestionIds: [],
   mockExamAttempts: [],
 };
 
+const PRACTICE_ORDER_OPTIONS = [
+  { value: "random", label: "ランダム" },
+  { value: "registered", label: "登録順" },
+  { value: "low_accuracy", label: "正答率が低い順" },
+  { value: "few_attempts", label: "回答回数が少ない順" },
+];
+
+const WRONG_REVIEW_ORDER_OPTIONS = [
+  { value: "low_accuracy", label: "正答率が低い順" },
+  { value: "last_wrong", label: "最後に間違えた順" },
+  { value: "many_wrong", label: "不正解・無回答が多い順" },
+  { value: "random", label: "ランダム" },
+  { value: "registered", label: "登録順" },
+];
+
 function App() {
   const [questions, setQuestions] = useState([]);
+  const [questionDataMeta, setQuestionDataMeta] = useState({
+    version: "",
+    updatedAt: "",
+    source: "",
+    declaredQuestionCount: "",
+  });
+
   const [loadState, setLoadState] = useState({
     loading: true,
     error: "",
@@ -31,6 +57,8 @@ function App() {
   const [setupType, setSetupType] = useState(null);
   const [setupCategories, setSetupCategories] = useState([]);
   const [setupCount, setSetupCount] = useState(10);
+  const [setupOrder, setSetupOrder] = useState("random");
+  const [wrongReviewOrder, setWrongReviewOrder] = useState("low_accuracy");
 
   const [sessionQuestions, setSessionQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -39,7 +67,7 @@ function App() {
   const [currentResult, setCurrentResult] = useState(null);
   const [sessionResults, setSessionResults] = useState([]);
   const [sessionStartedAt, setSessionStartedAt] = useState(null);
-  const [lastMockMissedQuestionIds, setLastMockMissedQuestionIds] = useState([]);
+  const [lastMissedQuestionIds, setLastMissedQuestionIds] = useState([]);
 
   const [historyFilters, setHistoryFilters] = useState({
     categories: [],
@@ -73,9 +101,23 @@ function App() {
         }
 
         const data = await response.json();
+        const meta = data?.meta ?? {};
         const loadedQuestions = Array.isArray(data?.questions) ? data.questions : [];
 
         setQuestions(loadedQuestions.filter((question) => question));
+
+        setQuestionDataMeta({
+          version: normalizeText(data?.version) || normalizeText(meta.version),
+          updatedAt:
+            normalizeText(data?.updatedAt) ||
+            normalizeText(data?.generatedAt) ||
+            normalizeText(meta.updatedAt) ||
+            normalizeText(meta.generatedAt),
+          source: normalizeText(data?.source) || normalizeText(meta.source),
+          declaredQuestionCount:
+            data?.questionCount !== undefined && data?.questionCount !== null ? String(data.questionCount) : "",
+        });
+
         setLoadState({ loading: false, error: "" });
       } catch (error) {
         setLoadState({
@@ -122,6 +164,7 @@ function App() {
     setSetupType(type);
     setSetupCategories([]);
     setSetupCount(10);
+    setSetupOrder("random");
     setScreen("setup");
   }
 
@@ -154,7 +197,8 @@ function App() {
     });
 
     const count = clampNumber(Number(setupCount), 1, pool.length || 1);
-    const selected = shuffleArray(pool).slice(0, count);
+    const ordered = orderQuestions(pool, setupOrder, history);
+    const selected = ordered.slice(0, count);
 
     startSession({
       nextMode: setupType === "true_false" ? "true_false_practice" : "multiple_choice_practice",
@@ -192,7 +236,8 @@ function App() {
 
   function startWrongReview() {
     const wrongIds = new Set(history.wrongQuestionIds ?? []);
-    const selected = questions.filter((question) => wrongIds.has(question.id));
+    const pool = questions.filter((question) => wrongIds.has(question.id));
+    const selected = orderQuestions(pool, wrongReviewOrder, history);
 
     startSession({
       nextMode: "wrong_review",
@@ -200,12 +245,16 @@ function App() {
     });
   }
 
-  function startLastMockMissedReview() {
-    const missedIds = new Set(lastMockMissedQuestionIds);
-    const selected = questions.filter((question) => missedIds.has(question.id));
+  function startLastMissedReview() {
+    const orderMap = new Map(lastMissedQuestionIds.map((questionId, index) => [questionId, index]));
+    const missedIds = new Set(lastMissedQuestionIds);
+
+    const selected = questions
+      .filter((question) => missedIds.has(question.id))
+      .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
 
     startSession({
-      nextMode: "last_mock_missed_review",
+      nextMode: "missed_review",
       selectedQuestions: selected,
     });
   }
@@ -314,15 +363,15 @@ function App() {
 
   function finishSession(results) {
     const durationSeconds = sessionStartedAt ? Math.max(0, Math.round((Date.now() - sessionStartedAt) / 1000)) : 0;
+    const missedIds = results
+      .filter((result) => !result.isCorrect)
+      .map((result) => result.question.id);
+
+    setLastMissedQuestionIds(missedIds);
 
     if (mode === "mock_exam") {
-      const missedIds = results
-        .filter((result) => !result.isCorrect)
-        .map((result) => result.question.id);
-
       const summary = summarizeResults(results, durationSeconds);
 
-      setLastMockMissedQuestionIds(missedIds);
       setHistory((prev) => ({
         ...prev,
         mockExamAttempts: [
@@ -349,12 +398,36 @@ function App() {
     setScreen("result");
   }
 
-  function resetLearningHistory() {
-    const ok = window.confirm("学習履歴をリセットします。よろしいですか？");
+  function resetAllLearningHistory() {
+    const ok = window.confirm("すべての学習履歴をリセットします。よろしいですか？");
     if (!ok) return;
 
-    setHistory(DEFAULT_HISTORY);
-    setLastMockMissedQuestionIds([]);
+    setHistory({
+      questionStats: {},
+      wrongQuestionIds: [],
+      mockExamAttempts: [],
+    });
+    setLastMissedQuestionIds([]);
+  }
+
+  function resetMockExamHistory() {
+    const ok = window.confirm("本番模擬の履歴だけをリセットします。よろしいですか？");
+    if (!ok) return;
+
+    setHistory((prev) => ({
+      ...prev,
+      mockExamAttempts: [],
+    }));
+  }
+
+  function clearWrongReviewTargets() {
+    const ok = window.confirm("誤答復習対象だけをクリアします。問題別の回答履歴は残ります。よろしいですか？");
+    if (!ok) return;
+
+    setHistory((prev) => ({
+      ...prev,
+      wrongQuestionIds: [],
+    }));
   }
 
   function toggleQuestionDetail(questionId) {
@@ -567,13 +640,16 @@ function App() {
         <MenuScreen
           totalQuestions={questions.length}
           topSummary={topSummary}
+          dataMeta={questionDataMeta}
+          wrongReviewOrder={wrongReviewOrder}
+          wrongReviewOrderOptions={WRONG_REVIEW_ORDER_OPTIONS}
+          onWrongReviewOrderChange={setWrongReviewOrder}
           onOpenTrueFalse={() => openSetup("true_false")}
           onOpenMultipleChoice={() => openSetup("multiple_choice")}
           onStartMockExam={startMockExamWithConfirm}
           onStartWrongReview={startWrongReview}
           onOpenHistory={() => setScreen("history")}
           onOpenQuestionList={() => setScreen("question_list")}
-          onResetHistory={resetLearningHistory}
           canStartWrongReview={(history.wrongQuestionIds?.length ?? 0) > 0}
         />
       )}
@@ -583,11 +659,14 @@ function App() {
           setupType={setupType}
           setupCategories={setupCategories}
           setupCount={setupCount}
+          setupOrder={setupOrder}
+          orderOptions={PRACTICE_ORDER_OPTIONS}
           categories={categories}
           questionCount={setupQuestionCount}
           onToggleCategory={toggleSetupCategory}
           onClearCategories={clearSetupCategories}
           onCountChange={setSetupCount}
+          onOrderChange={setSetupOrder}
           onStart={startPracticeFromSetup}
           onBack={backToMenu}
         />
@@ -619,8 +698,8 @@ function App() {
           results={sessionResults}
           categoryRows={categoryResultRows}
           onBackToMenu={backToMenu}
-          onReviewLastMissed={startLastMockMissedReview}
-          showLastMissedReview={mode === "mock_exam" && lastMockMissedQuestionIds.length > 0}
+          onReviewMissed={startLastMissedReview}
+          showMissedReview={lastMissedQuestionIds.length > 0}
         />
       )}
 
@@ -632,6 +711,9 @@ function App() {
           categories={categories}
           filters={historyFilters}
           onFilterChange={setHistoryFilters}
+          onResetAllHistory={resetAllLearningHistory}
+          onResetMockExamHistory={resetMockExamHistory}
+          onClearWrongReviewTargets={clearWrongReviewTargets}
           onBack={backToMenu}
         />
       )}
@@ -654,13 +736,16 @@ function App() {
 function MenuScreen({
   totalQuestions,
   topSummary,
+  dataMeta,
+  wrongReviewOrder,
+  wrongReviewOrderOptions,
+  onWrongReviewOrderChange,
   onOpenTrueFalse,
   onOpenMultipleChoice,
   onStartMockExam,
   onStartWrongReview,
   onOpenHistory,
   onOpenQuestionList,
-  onResetHistory,
   canStartWrongReview,
 }) {
   return (
@@ -680,6 +765,8 @@ function MenuScreen({
         </div>
       </section>
 
+      <VersionInfoPanel totalQuestions={totalQuestions} dataMeta={dataMeta} />
+
       <section className="menu-section">
         <div className="section-title-row">
           <h2>演習</h2>
@@ -689,12 +776,12 @@ function MenuScreen({
         <div className="menu-grid">
           <button className="menu-button primary" onClick={onOpenTrueFalse}>
             <span>○×演習</span>
-            <small>カテゴリと出題数を指定</small>
+            <small>カテゴリ・出題数・出題順を指定</small>
           </button>
 
           <button className="menu-button primary" onClick={onOpenMultipleChoice}>
             <span>択一演習</span>
-            <small>選択肢問題を演習</small>
+            <small>カテゴリ・出題数・出題順を指定</small>
           </button>
 
           <button className="menu-button accent" onClick={onStartMockExam}>
@@ -704,8 +791,21 @@ function MenuScreen({
 
           <button className="menu-button" onClick={onStartWrongReview} disabled={!canStartWrongReview}>
             <span>誤答復習</span>
-            <small>2回連続正解で対象外</small>
+            <small>指定した順序で復習</small>
           </button>
+        </div>
+
+        <div className="wrong-review-toolbar">
+          <label className="form-field">
+            <span>誤答復習の出題順</span>
+            <select value={wrongReviewOrder} onChange={(event) => onWrongReviewOrderChange(event.target.value)}>
+              {wrongReviewOrderOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </section>
 
@@ -718,7 +818,7 @@ function MenuScreen({
         <div className="menu-grid">
           <button className="menu-button" onClick={onOpenHistory}>
             <span>学習履歴を確認</span>
-            <small>点数推移・弱点確認</small>
+            <small>点数推移・弱点確認・履歴リセット</small>
           </button>
 
           <button className="menu-button" onClick={onOpenQuestionList}>
@@ -727,13 +827,47 @@ function MenuScreen({
           </button>
         </div>
       </section>
-
-      <div className="danger-zone">
-        <button className="ghost-button danger" onClick={onResetHistory}>
-          学習履歴をリセット
-        </button>
-      </div>
     </main>
+  );
+}
+
+function VersionInfoPanel({ totalQuestions, dataMeta }) {
+  return (
+    <section className="version-panel">
+      <div className="version-title-row">
+        <div>
+          <h2>バージョン情報</h2>
+          <p className="muted-text">アプリと問題データの現在情報です。</p>
+        </div>
+      </div>
+
+      <div className="version-grid">
+        <div className="version-item">
+          <span>アプリ</span>
+          <strong>v{APP_VERSION}</strong>
+        </div>
+        <div className="version-item">
+          <span>アプリ更新日</span>
+          <strong>{APP_UPDATED_AT}</strong>
+        </div>
+        <div className="version-item">
+          <span>問題データ版</span>
+          <strong>{displayMetaValue(dataMeta.version)}</strong>
+        </div>
+        <div className="version-item">
+          <span>問題データ更新日</span>
+          <strong>{displayMetaValue(dataMeta.updatedAt)}</strong>
+        </div>
+        <div className="version-item">
+          <span>登録問題数</span>
+          <strong>{totalQuestions}</strong>
+        </div>
+        <div className="version-item">
+          <span>仕様メモ</span>
+          <strong>{APP_SPEC_NOTE}</strong>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -741,11 +875,14 @@ function SetupScreen({
   setupType,
   setupCategories,
   setupCount,
+  setupOrder,
+  orderOptions,
   categories,
   questionCount,
   onToggleCategory,
   onClearCategories,
   onCountChange,
+  onOrderChange,
   onStart,
   onBack,
 }) {
@@ -800,6 +937,17 @@ function SetupScreen({
             })}
           </div>
         </div>
+
+        <label className="form-field">
+          <span>出題順</span>
+          <select value={setupOrder} onChange={(event) => onOrderChange(event.target.value)}>
+            {orderOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <label className="form-field">
           <span>出題数</span>
@@ -1010,8 +1158,8 @@ function ResultScreen({
   results,
   categoryRows,
   onBackToMenu,
-  onReviewLastMissed,
-  showLastMissedReview,
+  onReviewMissed,
+  showMissedReview,
 }) {
   const [showOnlyMissed, setShowOnlyMissed] = useState(false);
 
@@ -1065,12 +1213,12 @@ function ResultScreen({
         </div>
       </section>
 
-      {showLastMissedReview && (
+      {showMissedReview && (
         <section className="panel highlight-panel">
-          <h3>今回間違えた問題の復習</h3>
-          <p>直前の本番模擬で不正解または無回答だった問題だけを復習できます。</p>
-          <button className="wide-button primary" onClick={onReviewLastMissed}>
-            今回間違えた問題を復習する
+          <h3>間違えた問題だけ再演習</h3>
+          <p>今回の演習で不正解または無回答だった問題だけを再演習できます。</p>
+          <button className="wide-button primary" onClick={onReviewMissed}>
+            間違えた問題だけ再演習する
           </button>
         </section>
       )}
@@ -1179,6 +1327,9 @@ function HistoryScreen({
   categories,
   filters,
   onFilterChange,
+  onResetAllHistory,
+  onResetMockExamHistory,
+  onClearWrongReviewTargets,
   onBack,
 }) {
   const selectedCategories = Array.isArray(filters.categories) ? filters.categories : [];
@@ -1478,6 +1629,23 @@ function HistoryScreen({
           )}
         </div>
       </section>
+
+      <section className="panel reset-history-panel">
+        <h3>学習履歴のリセット</h3>
+        <p className="muted-text">削除する範囲を選択できます。</p>
+
+        <div className="reset-action-grid">
+          <button className="ghost-button danger" onClick={onResetAllHistory}>
+            全履歴リセット
+          </button>
+          <button className="ghost-button danger" onClick={onResetMockExamHistory}>
+            本番模擬履歴のみリセット
+          </button>
+          <button className="ghost-button danger" onClick={onClearWrongReviewTargets}>
+            誤答復習対象のみクリア
+          </button>
+        </div>
+      </section>
     </main>
   );
 }
@@ -1656,22 +1824,28 @@ function QuestionListScreen({
 
               {expanded && (
                 <div className="question-detail">
-                  <DetailRow label="問題ID" value={question.id} />
-                  <DetailRow label="形式" value={question.type === "true_false" ? "○×" : "択一"} />
-                  <DetailRow label="カテゴリ" value={normalizeText(question.category) || "未設定"} />
-                  <DetailRow label="サブカテゴリ" value={normalizeText(question.subCategory) || "-"} />
-                  <DetailRow label="タグ" value={(question.tags ?? []).join(", ") || "-"} />
+                  <div className="detail-card">
+                    <h4>基本情報</h4>
+                    <DetailRow label="問題ID" value={question.id} />
+                    <DetailRow label="形式" value={question.type === "true_false" ? "○×" : "択一"} />
+                    <DetailRow label="カテゴリ" value={normalizeText(question.category) || "未設定"} />
+                    <DetailRow label="サブカテゴリ" value={normalizeText(question.subCategory) || "-"} />
+                    <DetailRow label="タグ" value={(question.tags ?? []).join(", ") || "-"} />
+                  </div>
 
-                  <div className="detail-block">
+                  <div className="detail-card">
                     <h4>問題文</h4>
                     <p>{question.question}</p>
                     {renderImage(question.image, "問題画像")}
                   </div>
 
-                  <DetailRow label="正解" value={getCorrectAnswerText(question)} />
+                  <div className="detail-card answer-detail-card">
+                    <h4>正解</h4>
+                    <p className="correct-answer-text">{getCorrectAnswerText(question)}</p>
+                  </div>
 
                   {question.type === "multiple_choice" && Array.isArray(question.choices) && (
-                    <div className="detail-block">
+                    <div className="detail-card">
                       <h4>選択肢</h4>
                       {question.choices.map((choice) => (
                         <div key={choice.id} className="choice-explanation-item">
@@ -1686,13 +1860,14 @@ function QuestionListScreen({
                   )}
 
                   {question.explanation && (
-                    <div className="detail-block">
+                    <div className="detail-card">
                       <h4>総合解説</h4>
                       <p>{question.explanation}</p>
+                      {renderImage(question.explanationImage, "解説画像")}
                     </div>
                   )}
 
-                  {renderImage(question.explanationImage, "解説画像")}
+                  {!question.explanation && renderImage(question.explanationImage, "解説画像")}
                 </div>
               )}
             </article>
@@ -1790,6 +1965,7 @@ function updateLearningHistory(history, result) {
     lastResult: "",
     consecutiveCorrect: 0,
     lastAnsweredAt: "",
+    lastWrongAt: "",
   };
 
   const lastResult = result.isUnanswered ? "unanswered" : result.isCorrect ? "correct" : "wrong";
@@ -1802,6 +1978,7 @@ function updateLearningHistory(history, result) {
     lastResult,
     consecutiveCorrect: result.isCorrect ? previousStat.consecutiveCorrect + 1 : 0,
     lastAnsweredAt: result.answeredAt,
+    lastWrongAt: result.isCorrect ? previousStat.lastWrongAt ?? "" : result.answeredAt,
   };
 
   const wrongSet = new Set(history.wrongQuestionIds ?? []);
@@ -1845,6 +2022,52 @@ function summarizeResults(results, durationSeconds) {
     accuracy,
     durationSeconds,
   };
+}
+
+function orderQuestions(items, order, history) {
+  if (order === "random") return shuffleArray(items);
+
+  const rows = items.map((question, index) => {
+    const stat = history.questionStats?.[question.id] ?? {};
+    const attempts = Number(stat.attempts ?? 0);
+    const correct = Number(stat.correct ?? 0);
+    const wrong = Number(stat.wrong ?? 0);
+    const unanswered = Number(stat.unanswered ?? 0);
+    const mistakes = wrong + unanswered;
+    const accuracy = attempts > 0 ? correct / attempts : 1.01;
+    const lastAnsweredTime = toTime(stat.lastAnsweredAt);
+    const lastWrongTime =
+      toTime(stat.lastWrongAt) ||
+      (stat.lastResult === "wrong" || stat.lastResult === "unanswered" ? lastAnsweredTime : 0);
+
+    return {
+      question,
+      index,
+      attempts,
+      mistakes,
+      accuracy,
+      lastWrongTime,
+    };
+  });
+
+  rows.sort((a, b) => {
+    switch (order) {
+      case "registered":
+        return a.index - b.index;
+      case "low_accuracy":
+        return a.accuracy - b.accuracy || b.mistakes - a.mistakes || a.index - b.index;
+      case "few_attempts":
+        return a.attempts - b.attempts || a.index - b.index;
+      case "last_wrong":
+        return b.lastWrongTime - a.lastWrongTime || a.index - b.index;
+      case "many_wrong":
+        return b.mistakes - a.mistakes || a.accuracy - b.accuracy || a.index - b.index;
+      default:
+        return a.index - b.index;
+    }
+  });
+
+  return rows.map((row) => row.question);
 }
 
 function stratifiedSampleByCategory(items, targetCount) {
@@ -1936,8 +2159,8 @@ function getModeTitle(mode) {
       return "本番模擬";
     case "wrong_review":
       return "誤答復習";
-    case "last_mock_missed_review":
-      return "今回間違えた問題の復習";
+    case "missed_review":
+      return "間違えた問題だけ再演習";
     default:
       return "演習";
   }
@@ -1992,6 +2215,10 @@ function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function displayMetaValue(value) {
+  return normalizeText(value) || "-";
+}
+
 function clampNumber(value, min, max) {
   if (Number.isNaN(value)) return min;
   return Math.min(Math.max(value, min), max);
@@ -1999,6 +2226,13 @@ function clampNumber(value, min, max) {
 
 function createAttemptId() {
   return `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function toTime(value) {
+  if (!value) return 0;
+
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
 }
 
 export default App;

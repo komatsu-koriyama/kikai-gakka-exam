@@ -102,7 +102,8 @@ button:disabled {
 .panel,
 .question-card,
 .menu-section,
-.question-list-card {
+.question-list-card,
+.version-panel {
   border: 1px solid #d9e2ef;
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.92);
@@ -122,14 +123,16 @@ button:disabled {
 
 .menu-section,
 .panel,
-.question-card {
+.question-card,
+.version-panel {
   padding: 20px;
 }
 
 .section-title-row,
 .page-title-row,
 .practice-top-bar,
-.question-list-head {
+.question-list-head,
+.version-title-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -138,12 +141,14 @@ button:disabled {
 
 .section-title-row h2,
 .page-title-row h2,
-.practice-top-bar h2 {
+.practice-top-bar h2,
+.version-title-row h2 {
   margin: 0;
   font-size: 1.35rem;
 }
 
-.section-title-row p {
+.section-title-row p,
+.version-title-row p {
   margin: 4px 0 0;
   color: #667085;
 }
@@ -188,6 +193,33 @@ button:disabled {
 .summary-card.warning {
   border-color: #fde68a;
   background: #fffbeb;
+}
+
+.version-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.version-item {
+  border: 1px solid #e4eaf3;
+  border-radius: 14px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.version-item span {
+  display: block;
+  color: #667085;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.version-item strong {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.45;
 }
 
 .menu-grid {
@@ -286,11 +318,6 @@ button:disabled {
   color: #b42318;
 }
 
-.danger-zone {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .form-field {
   display: grid;
   gap: 7px;
@@ -325,6 +352,12 @@ button:disabled {
 .check-field input {
   width: 18px;
   height: 18px;
+}
+
+.wrong-review-toolbar {
+  margin-top: 14px;
+  border-top: 1px solid #e4eaf3;
+  padding-top: 14px;
 }
 
 .setup-status {
@@ -447,6 +480,17 @@ button:disabled {
 
 .history-card-list {
   display: none;
+}
+
+.reset-history-panel {
+  border-color: #fecaca;
+}
+
+.reset-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .practice-screen {
@@ -676,7 +720,8 @@ button:disabled {
 
 .explanation-block p,
 .choice-explanation-item p,
-.detail-block p {
+.detail-block p,
+.detail-card p {
   margin: 6px 0 0;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -866,9 +911,33 @@ tr:last-child td {
 }
 
 .question-detail {
+  display: grid;
+  gap: 12px;
   margin-top: 14px;
   border-top: 1px solid #e4eaf3;
   padding-top: 14px;
+}
+
+.detail-card {
+  border: 1px solid #e4eaf3;
+  border-radius: 16px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.detail-card h4 {
+  margin: 0 0 10px;
+  color: #172033;
+}
+
+.answer-detail-card {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.correct-answer-text {
+  font-size: 1.06rem;
+  font-weight: 900;
 }
 
 .muted-text {
@@ -923,14 +992,16 @@ tr:last-child td {
     padding: 9px 10px;
   }
 
-  .summary-grid {
+  .summary-grid,
+  .version-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .menu-grid,
   .filter-grid,
   .category-checkbox-grid,
-  .history-option-filter-grid {
+  .history-option-filter-grid,
+  .reset-action-grid {
     grid-template-columns: 1fr;
   }
 
@@ -943,7 +1014,8 @@ tr:last-child td {
   .practice-top-bar,
   .question-list-head,
   .result-list-header,
-  .category-select-header {
+  .category-select-header,
+  .version-title-row {
     flex-direction: column;
     align-items: stretch;
   }
@@ -956,10 +1028,6 @@ tr:last-child td {
     width: 100%;
     justify-content: center;
     border-radius: 14px;
-  }
-
-  .danger-zone {
-    justify-content: stretch;
   }
 
   .true-false-actions {
@@ -1114,12 +1182,14 @@ tr:last-child td {
   .menu-section,
   .panel,
   .question-card,
-  .question-list-card {
+  .question-list-card,
+  .version-panel {
     border-radius: 18px;
     padding: 15px;
   }
 
-  .summary-grid {
+  .summary-grid,
+  .version-grid {
     grid-template-columns: 1fr 1fr;
     gap: 9px;
   }
@@ -1130,6 +1200,10 @@ tr:last-child td {
 
   .summary-card strong {
     font-size: 1.35rem;
+  }
+
+  .version-item {
+    padding: 10px;
   }
 
   .menu-grid {
