@@ -945,6 +945,11 @@ function ResultScreen({
   onReviewLastMissed,
   showLastMissedReview,
 }) {
+  const [showOnlyMissed, setShowOnlyMissed] = useState(false);
+
+  const missedResults = results.filter((result) => !result.isCorrect);
+  const displayResults = showOnlyMissed ? missedResults : results;
+
   return (
     <main className="screen">
       <div className="page-title-row">
@@ -1037,28 +1042,63 @@ function ResultScreen({
       </section>
 
       <section className="panel">
-        <h3>解答一覧</h3>
-        <div className="result-list">
-          {results.map((result, index) => (
-            <div
-              key={`${result.question.id}-${index}`}
-              className={`result-item ${result.isCorrect ? "correct" : "wrong"}`}
-            >
-              <div className="result-item-head">
-                <strong>
-                  {index + 1}. {result.question.id}
-                </strong>
-                <span>{result.isUnanswered ? "無回答" : result.isCorrect ? "正解" : "不正解"}</span>
-              </div>
-              <p>{result.question.question}</p>
-              <div className="result-answer-row">
-                <span>あなたの回答：{result.userAnswerText}</span>
-                <span>正解：{getCorrectAnswerText(result.question)}</span>
-              </div>
-              {result.question.explanation && <p className="muted-text">{result.question.explanation}</p>}
-            </div>
-          ))}
+        <div className="result-list-header">
+          <div>
+            <h3>解答一覧</h3>
+            <p className="muted-text">
+              表示中：{displayResults.length} / {results.length} 問
+            </p>
+          </div>
+
+          <label className="result-filter-toggle">
+            <input
+              type="checkbox"
+              checked={showOnlyMissed}
+              onChange={(event) => setShowOnlyMissed(event.target.checked)}
+              disabled={missedResults.length === 0}
+            />
+            <span>不正解・無回答のみ表示</span>
+          </label>
         </div>
+
+        {showOnlyMissed && missedResults.length === 0 ? (
+          <div className="empty-result-filter">
+            <strong>不正解・無回答はありません。</strong>
+            <p className="muted-text">全問正解です。</p>
+          </div>
+        ) : displayResults.length === 0 ? (
+          <div className="empty-result-filter">
+            <strong>表示する解答がありません。</strong>
+          </div>
+        ) : (
+          <div className="result-list">
+            {displayResults.map((result) => {
+              const originalIndex = results.findIndex(
+                (item) => item.question.id === result.question.id && item.answeredAt === result.answeredAt
+              );
+
+              return (
+                <div
+                  key={`${result.question.id}-${result.answeredAt}`}
+                  className={`result-item ${result.isCorrect ? "correct" : "wrong"}`}
+                >
+                  <div className="result-item-head">
+                    <strong>
+                      {originalIndex + 1}. {result.question.id}
+                    </strong>
+                    <span>{result.isUnanswered ? "無回答" : result.isCorrect ? "正解" : "不正解"}</span>
+                  </div>
+                  <p>{result.question.question}</p>
+                  <div className="result-answer-row">
+                    <span>あなたの回答：{result.userAnswerText}</span>
+                    <span>正解：{getCorrectAnswerText(result.question)}</span>
+                  </div>
+                  {result.question.explanation && <p className="muted-text">{result.question.explanation}</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     </main>
   );
