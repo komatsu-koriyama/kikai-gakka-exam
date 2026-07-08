@@ -256,7 +256,10 @@ function buildMockExamAttempt(questions, results, startedAt, finishedAt) {
   const questionCount = questions.length;
   const durationSeconds =
     startedAt && finishedAt
-      ? Math.max(0, Math.floor((finishedAt.getTime() - startedAt.getTime()) / 1000))
+      ? Math.max(
+          0,
+          Math.floor((finishedAt.getTime() - startedAt.getTime()) / 1000)
+        )
       : 0;
 
   return {
@@ -533,6 +536,7 @@ function App() {
     mode !== "true_false_setup" &&
     mode !== "multiple_choice_setup" &&
     mode !== "learning_history" &&
+    mode !== "question_list" &&
     activeQuestions.length > 0 &&
     currentIndex >= activeQuestions.length;
 
@@ -653,6 +657,18 @@ function App() {
     setReviewQuestions([]);
     setMockReviewQuestions([]);
     setMode("learning_history");
+  };
+
+  const openQuestionList = () => {
+    resetPracticeState();
+    resetSetupState();
+    setPracticeQuestions([]);
+    setMockQuestions([]);
+    setMockAnswerRecords([]);
+    setIsFullMockExam(false);
+    setReviewQuestions([]);
+    setMockReviewQuestions([]);
+    setMode("question_list");
   };
 
   const buildConfiguredPracticeQuestions = (sourceQuestions) => {
@@ -973,6 +989,15 @@ function App() {
             >
               誤答復習
             </button>
+
+            <button
+              type="button"
+              className="button primary"
+              onClick={openQuestionList}
+              disabled={allQuestions.length === 0}
+            >
+              問題一覧
+            </button>
           </div>
         </section>
 
@@ -1019,6 +1044,15 @@ function App() {
       <LearningHistoryScreen
         questions={allQuestions}
         learningHistory={learningHistory}
+        onBackToMenu={backToMenu}
+      />
+    );
+  }
+
+  if (mode === "question_list") {
+    return (
+      <QuestionListScreen
+        questions={allQuestions}
         onBackToMenu={backToMenu}
       />
     );
@@ -1181,7 +1215,9 @@ function LearningHistoryScreen({ questions, learningHistory, onBackToMenu }) {
   const [wrongTargetOnly, setWrongTargetOnly] = useState(false);
   const [hasUnansweredOnly, setHasUnansweredOnly] = useState(false);
 
-  const questionMap = new Map(questions.map((question) => [question.id, question]));
+  const questionMap = new Map(
+    questions.map((question) => [question.id, question])
+  );
   const wrongIdSet = new Set(learningHistory.wrongQuestionIds ?? []);
   const questionStats = learningHistory.questionStats ?? {};
   const mockExamAttempts = learningHistory.mockExamAttempts ?? [];
@@ -1463,6 +1499,343 @@ function LearningHistoryScreen({ questions, learningHistory, onBackToMenu }) {
         </button>
       </div>
     </main>
+  );
+}
+
+function QuestionListScreen({ questions, onBackToMenu }) {
+  const [keyword, setKeyword] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedType, setSelectedType] = useState("all");
+  const [hasQuestionImageOnly, setHasQuestionImageOnly] = useState(false);
+  const [hasExplanationImageOnly, setHasExplanationImageOnly] = useState(false);
+  const [emptyCategoryOnly, setEmptyCategoryOnly] = useState(false);
+  const [selectedQuestionId, setSelectedQuestionId] = useState(
+    questions[0]?.id ?? null
+  );
+
+  const categories = buildCategoryOptions(questions);
+  const normalizedKeyword = keyword.trim().toLowerCase();
+
+  const filteredQuestions = questions.filter((question) => {
+    const category = getCategoryName(question);
+    const searchableText = [
+      question.id,
+      question.type,
+      question.category,
+      question.subCategory,
+      question.question,
+      question.explanation,
+      ...(question.tags ?? []),
+      ...(question.choices ?? []).map((choice) => choice.text),
+      ...(question.choices ?? []).map((choice) => choice.explanation),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    if (normalizedKeyword && !searchableText.includes(normalizedKeyword)) {
+      return false;
+    }
+
+    if (selectedCategory !== "all" && category !== selectedCategory) {
+      return false;
+    }
+
+    if (selectedType !== "all" && question.type !== selectedType) {
+      return false;
+    }
+
+    if (hasQuestionImageOnly && !question.image) {
+      return false;
+    }
+
+    if (hasExplanationImageOnly && !question.explanationImage) {
+      return false;
+    }
+
+    if (emptyCategoryOnly && question.category) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const selectedQuestion =
+    filteredQuestions.find((question) => question.id === selectedQuestionId) ??
+    filteredQuestions[0] ??
+    null;
+
+  useEffect(() => {
+    if (!filteredQuestions.length) {
+      setSelectedQuestionId(null);
+      return;
+    }
+
+    const exists = filteredQuestions.some(
+      (question) => question.id === selectedQuestionId
+    );
+
+    if (!exists) {
+      setSelectedQuestionId(filteredQuestions[0].id);
+    }
+  }, [filteredQuestions, selectedQuestionId]);
+
+  return (
+    <main className="container question-list-container">
+      <h1>問題一覧</h1>
+
+      <section className="card">
+        <h2>検索・絞り込み</h2>
+        <p className="note">
+          問題データを確認するための画面です。受験者も使用できるため、演習とは分けて確認してください。
+        </p>
+
+        <div className="question-list-filter-panel">
+          <label className="question-list-filter-field wide">
+            <span>キーワード</span>
+            <input
+              type="text"
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="問題文、問題ID、解説、選択肢など"
+            />
+          </label>
+
+          <label className="question-list-filter-field">
+            <span>カテゴリ</span>
+            <select
+              value={selectedCategory}
+              onChange={(event) => setSelectedCategory(event.target.value)}
+            >
+              <option value="all">すべて</option>
+              {categories.map((item) => (
+                <option key={item.category} value={item.category}>
+                  {item.category}（{item.count}問）
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="question-list-filter-field">
+            <span>形式</span>
+            <select
+              value={selectedType}
+              onChange={(event) => setSelectedType(event.target.value)}
+            >
+              <option value="all">すべて</option>
+              <option value="true_false">○×</option>
+              <option value="multiple_choice">択一</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="question-list-checks">
+          <label className="history-check">
+            <input
+              type="checkbox"
+              checked={hasQuestionImageOnly}
+              onChange={(event) =>
+                setHasQuestionImageOnly(event.target.checked)
+              }
+            />
+            <span>問題画像あり</span>
+          </label>
+
+          <label className="history-check">
+            <input
+              type="checkbox"
+              checked={hasExplanationImageOnly}
+              onChange={(event) =>
+                setHasExplanationImageOnly(event.target.checked)
+              }
+            />
+            <span>解説画像あり</span>
+          </label>
+
+          <label className="history-check">
+            <input
+              type="checkbox"
+              checked={emptyCategoryOnly}
+              onChange={(event) => setEmptyCategoryOnly(event.target.checked)}
+            />
+            <span>カテゴリ未設定</span>
+          </label>
+        </div>
+
+        <p className="note">
+          表示件数：{filteredQuestions.length} / {questions.length} 問
+        </p>
+      </section>
+
+      <section className="question-list-layout">
+        <div className="card question-list-panel">
+          <h2>一覧</h2>
+
+          {filteredQuestions.length === 0 ? (
+            <p>条件に一致する問題はありません。</p>
+          ) : (
+            <div className="question-list-items">
+              {filteredQuestions.map((question) => {
+                const questionText =
+                  question.question.length > 80
+                    ? `${question.question.slice(0, 80)}...`
+                    : question.question;
+
+                return (
+                  <button
+                    key={question.id}
+                    type="button"
+                    className={
+                      selectedQuestion?.id === question.id
+                        ? "question-list-item selected"
+                        : "question-list-item"
+                    }
+                    onClick={() => setSelectedQuestionId(question.id)}
+                  >
+                    <span className="question-list-item-header">
+                      <strong>{question.id}</strong>
+                      <span>
+                        {question.type === "true_false" ? "○×" : "択一"}
+                      </span>
+                    </span>
+                    <span className="question-list-item-category">
+                      {getCategoryName(question)}
+                    </span>
+                    <span className="question-list-item-text">
+                      {questionText}
+                    </span>
+                    <span className="question-list-item-badges">
+                      {question.image && (
+                        <span className="question-data-badge">問題画像</span>
+                      )}
+                      {question.explanationImage && (
+                        <span className="question-data-badge">解説画像</span>
+                      )}
+                      {!question.category && (
+                        <span className="question-data-badge warning">
+                          カテゴリ未設定
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="card question-detail-panel">
+          <h2>詳細</h2>
+
+          {!selectedQuestion ? (
+            <p>確認する問題を選択してください。</p>
+          ) : (
+            <QuestionDetail question={selectedQuestion} />
+          )}
+        </div>
+      </section>
+
+      <div className="action-row">
+        <button type="button" className="button secondary" onClick={onBackToMenu}>
+          トップへ戻る
+        </button>
+      </div>
+    </main>
+  );
+}
+
+function QuestionDetail({ question }) {
+  const correctChoice =
+    question.type === "multiple_choice"
+      ? question.choices.find((choice) => choice.isCorrect)
+      : null;
+
+  return (
+    <div className="question-detail">
+      <div className="question-detail-meta">
+        <span>問題ID：{question.id}</span>
+        <span>形式：{question.type === "true_false" ? "○×" : "択一"}</span>
+        <span>カテゴリ：{question.category ?? "未設定"}</span>
+        <span>サブカテゴリ：{question.subCategory ?? "未設定"}</span>
+      </div>
+
+      {question.tags?.length > 0 && (
+        <p className="question-detail-tags">タグ：{question.tags.join("、")}</p>
+      )}
+
+      <section className="question-detail-section">
+        <h3>問題文</h3>
+        <p className="question-detail-text">{question.question}</p>
+      </section>
+
+      <QuestionImage src={question.image} label={`${question.id}の問題画像`} />
+
+      <section className="question-detail-section">
+        <h3>正解</h3>
+        {question.type === "true_false" ? (
+          <p className="question-detail-answer">
+            {formatTrueFalse(question.answer)}
+          </p>
+        ) : (
+          <p className="question-detail-answer">
+            {correctChoice?.id}. {correctChoice?.text}
+          </p>
+        )}
+      </section>
+
+      {question.type === "multiple_choice" && (
+        <section className="question-detail-section">
+          <h3>選択肢</h3>
+          <div className="question-detail-choices">
+            {question.choices.map((choice) => (
+              <div
+                key={choice.id}
+                className={
+                  choice.isCorrect
+                    ? "question-detail-choice correct-choice-detail"
+                    : "question-detail-choice"
+                }
+              >
+                <p>
+                  <strong>{choice.id}. </strong>
+                  {choice.text}
+                </p>
+                <p className="note">
+                  {choice.explanation || "選択肢ごとの解説なし"}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="question-detail-section">
+        <h3>{question.type === "multiple_choice" ? "総合解説" : "解説"}</h3>
+        <p>{question.explanation || "解説なし"}</p>
+      </section>
+
+      <QuestionImage
+        src={question.explanationImage}
+        label={`${question.id}の解説画像`}
+      />
+
+      {SHOW_DEBUG_INFO && (
+        <div className="debug-box">
+          <p>source：{question.source ?? "-"}</p>
+          <p>difficulty：{question.difficulty ?? "-"}</p>
+          <p>version：{question.version ?? "-"}</p>
+          <p>lastUpdated：{question.lastUpdated ?? "-"}</p>
+          <p>
+            shuffleChoices：
+            {question.shuffleChoices === true
+              ? "true"
+              : question.shuffleChoices === false
+              ? "false"
+              : "-"}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2176,7 +2549,10 @@ function ResultScreen({
               : "review-item review-item-wrong";
 
             return (
-              <li key={`${result.questionId}-${index}`} className={reviewClassName}>
+              <li
+                key={`${result.questionId}-${index}`}
+                className={reviewClassName}
+              >
                 <ReviewResult question={question} result={result} />
               </li>
             );
@@ -2425,6 +2801,7 @@ function getModeTitle(mode) {
   if (mode === "wrong_review") return "誤答復習";
   if (mode === "mock_exam_review") return "今回間違えた問題の復習";
   if (mode === "learning_history") return "学習履歴";
+  if (mode === "question_list") return "問題一覧";
   return "学科試験演習アプリ";
 }
 
