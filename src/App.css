@@ -426,6 +426,25 @@ button:disabled {
   padding-top: 14px;
 }
 
+.history-filter-layout {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.history-category-filter {
+  border: 1px solid #e4eaf3;
+  border-radius: 16px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.history-option-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .practice-screen {
   max-width: 860px;
   margin: 0 auto;
@@ -883,7 +902,8 @@ tr:last-child td {
 
   .menu-grid,
   .filter-grid,
-  .category-checkbox-grid {
+  .category-checkbox-grid,
+  .history-option-filter-grid {
     grid-template-columns: 1fr;
   }
 
@@ -975,6 +995,10 @@ tr:last-child td {
   .menu-button {
     min-height: 82px;
     padding: 15px;
+  }
+
+  .history-category-filter {
+    padding: 12px;
   }
 
   .mock-progress-card {

@@ -42,7 +42,7 @@ function App() {
   const [lastMockMissedQuestionIds, setLastMockMissedQuestionIds] = useState([]);
 
   const [historyFilters, setHistoryFilters] = useState({
-    category: "all",
+    categories: [],
     lowAccuracyOnly: false,
     wrongOnly: false,
     includeUnansweredOnly: false,
@@ -403,6 +403,8 @@ function App() {
   }, [sessionResults]);
 
   const historyRows = useMemo(() => {
+    const selectedCategorySet = new Set(historyFilters.categories ?? []);
+
     return questions
       .map((question) => {
         const stat = history.questionStats?.[question.id];
@@ -425,8 +427,9 @@ function App() {
         };
       })
       .filter((row) => {
-        if (historyFilters.category !== "all" && normalizeText(row.question.category) !== historyFilters.category) {
-          return false;
+        if (selectedCategorySet.size > 0) {
+          const category = normalizeText(row.question.category);
+          if (!selectedCategorySet.has(category)) return false;
         }
 
         if (historyFilters.lowAccuracyOnly) {
@@ -790,11 +793,7 @@ function SetupScreen({
 
               return (
                 <label key={category} className={`category-check-button ${checked ? "checked" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => onToggleCategory(category)}
-                  />
+                  <input type="checkbox" checked={checked} onChange={() => onToggleCategory(category)} />
                   <span>{category}</span>
                 </label>
               );
@@ -1182,6 +1181,34 @@ function HistoryScreen({
   onFilterChange,
   onBack,
 }) {
+  const selectedCategories = Array.isArray(filters.categories) ? filters.categories : [];
+  const isAllSelected = selectedCategories.length === 0;
+
+  function toggleCategory(category) {
+    onFilterChange((prev) => {
+      const currentCategories = Array.isArray(prev.categories) ? prev.categories : [];
+
+      if (currentCategories.includes(category)) {
+        return {
+          ...prev,
+          categories: currentCategories.filter((item) => item !== category),
+        };
+      }
+
+      return {
+        ...prev,
+        categories: [...currentCategories, category],
+      };
+    });
+  }
+
+  function clearCategories() {
+    onFilterChange((prev) => ({
+      ...prev,
+      categories: [],
+    }));
+  }
+
   return (
     <main className="screen">
       <div className="page-title-row">
@@ -1265,50 +1292,82 @@ function HistoryScreen({
       <section className="panel">
         <h3>問題別の弱点確認</h3>
 
-        <div className="filter-grid">
-          <label className="form-field">
-            <span>カテゴリ</span>
-            <select
-              value={filters.category}
-              onChange={(event) => onFilterChange((prev) => ({ ...prev, category: event.target.value }))}
+        <div className="history-filter-layout">
+          <div className="category-select-panel history-category-filter">
+            <div className="category-select-header">
+              <div>
+                <h3>カテゴリ</h3>
+                <p className="muted-text">
+                  複数選択できます。未選択の場合は、すべてのカテゴリを表示します。
+                </p>
+              </div>
+
+              <button className="ghost-button small" onClick={clearCategories} disabled={isAllSelected}>
+                すべてに戻す
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className={`category-all-button ${isAllSelected ? "active" : ""}`}
+              onClick={clearCategories}
             >
-              <option value="all">すべて</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-          </label>
+              すべてのカテゴリ
+            </button>
 
-          <label className="check-field">
-            <input
-              type="checkbox"
-              checked={filters.lowAccuracyOnly}
-              onChange={(event) => onFilterChange((prev) => ({ ...prev, lowAccuracyOnly: event.target.checked }))}
-            />
-            <span>正答率が低い問題</span>
-          </label>
+            <div className="category-checkbox-grid">
+              {categories.map((category) => {
+                const checked = selectedCategories.includes(category);
 
-          <label className="check-field">
-            <input
-              type="checkbox"
-              checked={filters.wrongOnly}
-              onChange={(event) => onFilterChange((prev) => ({ ...prev, wrongOnly: event.target.checked }))}
-            />
-            <span>誤答復習対象</span>
-          </label>
+                return (
+                  <label key={category} className={`category-check-button ${checked ? "checked" : ""}`}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleCategory(category)} />
+                    <span>{category}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
 
-          <label className="check-field">
-            <input
-              type="checkbox"
-              checked={filters.includeUnansweredOnly}
-              onChange={(event) =>
-                onFilterChange((prev) => ({ ...prev, includeUnansweredOnly: event.target.checked }))
-              }
-            />
-            <span>未回答を含む問題</span>
-          </label>
+          <div className="history-option-filter-grid">
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={filters.lowAccuracyOnly}
+                onChange={(event) => onFilterChange((prev) => ({ ...prev, lowAccuracyOnly: event.target.checked }))}
+              />
+              <span>正答率が低い問題</span>
+            </label>
+
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={filters.wrongOnly}
+                onChange={(event) => onFilterChange((prev) => ({ ...prev, wrongOnly: event.target.checked }))}
+              />
+              <span>誤答復習対象</span>
+            </label>
+
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={filters.includeUnansweredOnly}
+                onChange={(event) =>
+                  onFilterChange((prev) => ({ ...prev, includeUnansweredOnly: event.target.checked }))
+                }
+              />
+              <span>未回答を含む問題</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="list-count">
+          表示件数：{rows.length} 件
+          {selectedCategories.length > 0 && (
+            <span className="selected-category-summary">
+              選択中：{selectedCategories.length}カテゴリ
+            </span>
+          )}
         </div>
 
         <div className="table-scroll">
@@ -1481,11 +1540,7 @@ function QuestionListScreen({
 
                   return (
                     <label key={category} className={`category-check-button ${checked ? "checked" : ""}`}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleCategory(category)}
-                      />
+                      <input type="checkbox" checked={checked} onChange={() => toggleCategory(category)} />
                       <span>{category}</span>
                     </label>
                   );
