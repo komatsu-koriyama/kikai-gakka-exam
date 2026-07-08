@@ -50,7 +50,7 @@ function App() {
 
   const [questionListFilters, setQuestionListFilters] = useState({
     keyword: "",
-    category: "all",
+    categories: [],
     type: "all",
     hasImage: false,
     hasExplanationImage: false,
@@ -465,6 +465,7 @@ function App() {
 
   const filteredQuestionList = useMemo(() => {
     const keyword = questionListFilters.keyword.trim().toLowerCase();
+    const selectedCategorySet = new Set(questionListFilters.categories ?? []);
 
     return questions.filter((question) => {
       const category = normalizeText(question.category);
@@ -487,7 +488,7 @@ function App() {
         if (!target.includes(keyword)) return false;
       }
 
-      if (questionListFilters.category !== "all" && category !== questionListFilters.category) {
+      if (selectedCategorySet.size > 0 && !selectedCategorySet.has(category)) {
         return false;
       }
 
@@ -1360,6 +1361,34 @@ function QuestionListScreen({
   onToggleDetail,
   onBack,
 }) {
+  const selectedCategories = Array.isArray(filters.categories) ? filters.categories : [];
+  const isAllSelected = selectedCategories.length === 0;
+
+  function toggleCategory(category) {
+    onFilterChange((prev) => {
+      const currentCategories = Array.isArray(prev.categories) ? prev.categories : [];
+
+      if (currentCategories.includes(category)) {
+        return {
+          ...prev,
+          categories: currentCategories.filter((item) => item !== category),
+        };
+      }
+
+      return {
+        ...prev,
+        categories: [...currentCategories, category],
+      };
+    });
+  }
+
+  function clearCategories() {
+    onFilterChange((prev) => ({
+      ...prev,
+      categories: [],
+    }));
+  }
+
   return (
     <main className="screen">
       <div className="page-title-row">
@@ -1382,21 +1411,6 @@ function QuestionListScreen({
               onChange={(event) => onFilterChange((prev) => ({ ...prev, keyword: event.target.value }))}
               placeholder="問題文・解説・IDで検索"
             />
-          </label>
-
-          <label className="form-field">
-            <span>カテゴリ</span>
-            <select
-              value={filters.category}
-              onChange={(event) => onFilterChange((prev) => ({ ...prev, category: event.target.value }))}
-            >
-              <option value="all">すべて</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
           </label>
 
           <label className="form-field">
@@ -1437,11 +1451,60 @@ function QuestionListScreen({
             />
             <span>カテゴリ未設定</span>
           </label>
+
+          <div className="question-list-category-filter">
+            <div className="category-select-panel">
+              <div className="category-select-header">
+                <div>
+                  <h3>カテゴリ</h3>
+                  <p className="muted-text">
+                    複数選択できます。未選択の場合は、すべてのカテゴリを表示します。
+                  </p>
+                </div>
+
+                <button className="ghost-button small" onClick={clearCategories} disabled={isAllSelected}>
+                  すべてに戻す
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className={`category-all-button ${isAllSelected ? "active" : ""}`}
+                onClick={clearCategories}
+              >
+                すべてのカテゴリ
+              </button>
+
+              <div className="category-checkbox-grid">
+                {categories.map((category) => {
+                  const checked = selectedCategories.includes(category);
+
+                  return (
+                    <label key={category} className={`category-check-button ${checked ? "checked" : ""}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleCategory(category)}
+                      />
+                      <span>{category}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="question-list">
-        <div className="list-count">表示件数：{questions.length} 件</div>
+        <div className="list-count">
+          表示件数：{questions.length} 件
+          {selectedCategories.length > 0 && (
+            <span className="selected-category-summary">
+              選択中：{selectedCategories.length}カテゴリ
+            </span>
+          )}
+        </div>
 
         {questions.map((question) => {
           const expanded = expandedQuestionIds.has(question.id);
