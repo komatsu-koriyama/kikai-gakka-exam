@@ -92,8 +92,8 @@ function App() {
       try {
         setLoadState({ loading: true, error: "" });
 
-        const response = await fetch("/data/questions.json", {
-          cache: "no-store",
+        const response = await fetch(`${import.meta.env.BASE_URL}data/questions.json`, {
+        cache: "no-store",
         });
 
         if (!response.ok) {
