@@ -205,6 +205,123 @@ function buildUnansweredResult(question) {
   };
 }
 
+function buildCategoryAllocation(questions, targetCount) {
+  const categoryCounts = new Map();
+
+  questions.forEach((question) => {
+    const category = getCategoryName(question);
+    categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
+  });
+
+  const totalCount = questions.length;
+
+  if (totalCount === 0 || targetCount <= 0) {
+    return new Map();
+  }
+
+  const entries = Array.from(categoryCounts.entries()).map(
+    ([category, available]) => {
+      const exact = (available / totalCount) * targetCount;
+
+      return {
+        category,
+        available,
+        exact,
+        base: Math.min(Math.floor(exact), available),
+        remainder: exact - Math.floor(exact),
+      };
+    }
+  );
+
+  const allocation = new Map();
+
+  entries.forEach((entry) => {
+    allocation.set(entry.category, entry.base);
+  });
+
+  let allocatedCount = entries.reduce((sum, entry) => sum + entry.base, 0);
+  let remainingCount = targetCount - allocatedCount;
+
+  const sortedEntries = [...entries].sort((a, b) => {
+    if (b.remainder !== a.remainder) {
+      return b.remainder - a.remainder;
+    }
+
+    if (b.available !== a.available) {
+      return b.available - a.available;
+    }
+
+    return a.category.localeCompare(b.category, "ja");
+  });
+
+  while (remainingCount > 0) {
+    let added = false;
+
+    for (const entry of sortedEntries) {
+      const current = allocation.get(entry.category) ?? 0;
+
+      if (current < entry.available) {
+        allocation.set(entry.category, current + 1);
+        allocatedCount += 1;
+        remainingCount -= 1;
+        added = true;
+
+        if (remainingCount === 0) {
+          break;
+        }
+      }
+    }
+
+    if (!added) {
+      break;
+    }
+  }
+
+  return allocation;
+}
+
+function selectQuestionsByCategoryRatio(questions, targetCount) {
+  if (questions.length <= targetCount) {
+    return shuffleArray(questions);
+  }
+
+  const allocation = buildCategoryAllocation(questions, targetCount);
+  const groupedQuestions = new Map();
+
+  questions.forEach((question) => {
+    const category = getCategoryName(question);
+
+    if (!groupedQuestions.has(category)) {
+      groupedQuestions.set(category, []);
+    }
+
+    groupedQuestions.get(category).push(question);
+  });
+
+  const selectedQuestions = [];
+
+  allocation.forEach((count, category) => {
+    const group = shuffleArray(groupedQuestions.get(category) ?? []);
+    selectedQuestions.push(...group.slice(0, count));
+  });
+
+  if (selectedQuestions.length < targetCount) {
+    const selectedIdSet = new Set(
+      selectedQuestions.map((question) => question.id)
+    );
+
+    const remainingQuestions = shuffleArray(
+      questions.filter((question) => !selectedIdSet.has(question.id))
+    );
+
+    selectedQuestions.push(
+      ...remainingQuestions.slice(0, targetCount - selectedQuestions.length)
+    );
+  }
+
+  return shuffleArray(selectedQuestions.slice(0, targetCount));
+}
+
 function buildMockExamQuestions(trueFalseQuestions, multipleChoiceQuestions) {
   const targetTrueFalseQuestions = trueFalseQuestions.filter(
     (question) => !question.isCalculation
@@ -218,13 +335,15 @@ function buildMockExamQuestions(trueFalseQuestions, multipleChoiceQuestions) {
     targetMultipleChoiceQuestions.length >= MOCK_EXAM_RULE.multipleChoiceCount;
 
   if (canBuildFullMockExam) {
-    const selectedTrueFalseQuestions = shuffleArray(
-      targetTrueFalseQuestions
-    ).slice(0, MOCK_EXAM_RULE.trueFalseCount);
+    const selectedTrueFalseQuestions = selectQuestionsByCategoryRatio(
+      targetTrueFalseQuestions,
+      MOCK_EXAM_RULE.trueFalseCount
+    );
 
-    const selectedMultipleChoiceQuestions = shuffleArray(
-      targetMultipleChoiceQuestions
-    ).slice(0, MOCK_EXAM_RULE.multipleChoiceCount);
+    const selectedMultipleChoiceQuestions = selectQuestionsByCategoryRatio(
+      targetMultipleChoiceQuestions,
+      MOCK_EXAM_RULE.multipleChoiceCount
+    );
 
     return {
       questions: shuffleArray([
@@ -1402,7 +1521,7 @@ function MockExamScreen({
             <p>
               出題構成：
               {isFullMockExam
-                ? "70問構成（○×60問・択一10問）"
+                ? "70問構成（○×60問・択一10問、カテゴリ比率考慮）"
                 : "問題数不足のため、対象問題を全問出題"}
             </p>
             <p>
