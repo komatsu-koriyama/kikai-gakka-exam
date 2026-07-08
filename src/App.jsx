@@ -1370,7 +1370,7 @@ function HistoryScreen({
           )}
         </div>
 
-        <div className="table-scroll">
+        <div className="table-scroll history-table-wrap">
           <table>
             <thead>
               <tr>
@@ -1405,6 +1405,77 @@ function HistoryScreen({
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="history-card-list">
+          {rows.length === 0 ? (
+            <div className="empty-result-filter">
+              <strong>表示する問題がありません。</strong>
+              <p className="muted-text">絞り込み条件を変更してください。</p>
+            </div>
+          ) : (
+            rows.map((row) => {
+              const isLowAccuracy =
+                row.accuracy !== null && row.accuracy < LOW_ACCURACY_THRESHOLD && row.attempts > 0;
+
+              return (
+                <article
+                  key={row.question.id}
+                  className={`history-question-card ${row.isWrongReviewTarget ? "review-target" : ""} ${
+                    isLowAccuracy ? "low-accuracy" : ""
+                  }`}
+                >
+                  <div className="history-card-head">
+                    <div>
+                      <strong>{row.question.id}</strong>
+                      <span>{normalizeText(row.question.category) || "未設定"}</span>
+                    </div>
+                    <div className="history-card-badges">
+                      {row.isWrongReviewTarget && <span className="status-badge danger">復習対象</span>}
+                      {isLowAccuracy && <span className="status-badge warning">低正答率</span>}
+                    </div>
+                  </div>
+
+                  <p className="history-card-question">{row.question.question}</p>
+
+                  <div className="history-card-score">
+                    <span>正答率</span>
+                    <strong>{row.accuracy === null ? "-" : `${row.accuracy}%`}</strong>
+                  </div>
+
+                  <div className="history-card-stats">
+                    <div>
+                      <span>回答</span>
+                      <strong>{row.attempts}</strong>
+                    </div>
+                    <div>
+                      <span>正解</span>
+                      <strong>{row.correct}</strong>
+                    </div>
+                    <div>
+                      <span>不正解</span>
+                      <strong className={row.wrong > 0 ? "danger-text" : ""}>{row.wrong}</strong>
+                    </div>
+                    <div>
+                      <span>無回答</span>
+                      <strong className={row.unanswered > 0 ? "warning-text" : ""}>{row.unanswered}</strong>
+                    </div>
+                  </div>
+
+                  <div className="history-card-detail-grid">
+                    <div>
+                      <span>最後の結果</span>
+                      <strong>{formatResultLabel(row.lastResult)}</strong>
+                    </div>
+                    <div>
+                      <span>最終回答日時</span>
+                      <strong>{formatDateTime(row.lastAnsweredAt)}</strong>
+                    </div>
+                  </div>
+                </article>
+              );
+            })
+          )}
         </div>
       </section>
     </main>
