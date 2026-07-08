@@ -2142,9 +2142,13 @@ function saveHistory(history) {
 function renderImage(src, alt) {
   if (!src) return null;
 
+  const normalizedSrc = String(src).startsWith("/")
+    ? `${import.meta.env.BASE_URL}${String(src).replace(/^\/+/, "")}`
+    : `${import.meta.env.BASE_URL}${String(src).replace(/^\.?\//, "")}`;
+
   return (
     <div className="image-wrap">
-      <img src={src} alt={alt} />
+      <img src={normalizedSrc} alt={alt} />
     </div>
   );
 }
