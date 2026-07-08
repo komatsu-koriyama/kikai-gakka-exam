@@ -173,11 +173,26 @@ p {
   box-shadow: var(--shadow-soft);
 }
 
+.menu-section {
+  margin-top: 24px;
+}
+
+.menu-section-title {
+  margin: 0 0 10px;
+  color: var(--text-sub);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
 .menu-buttons {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  margin-top: 24px;
+}
+
+.menu-buttons-secondary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .button {
@@ -833,7 +848,9 @@ p {
 
 .question-list-filter-panel {
   display: grid;
-  grid-template-columns: minmax(280px, 2fr) minmax(180px, 1fr) minmax(140px, 0.8fr);
+  grid-template-columns:
+    minmax(280px, 2fr) minmax(180px, 1fr)
+    minmax(140px, 0.8fr);
   gap: 12px;
   align-items: end;
   margin-top: 18px;
@@ -1127,7 +1144,12 @@ p {
     border-radius: 14px;
   }
 
-  .menu-buttons {
+  .menu-section {
+    margin-top: 22px;
+  }
+
+  .menu-buttons,
+  .menu-buttons-secondary {
     grid-template-columns: 1fr;
   }
 

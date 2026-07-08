@@ -750,6 +750,16 @@ function App() {
     }
   };
 
+  const startMockExamWithConfirm = () => {
+    const confirmed = window.confirm(
+      "本番模擬を開始します。70問構成です。よろしいですか？"
+    );
+
+    if (!confirmed) return;
+
+    startMode("mock_exam");
+  };
+
   const startMockExamReview = (reviewTargets) => {
     resetPracticeState();
     resetSetupState();
@@ -773,6 +783,16 @@ function App() {
     setReviewQuestions([]);
     setMockReviewQuestions([]);
     setMode("menu");
+  };
+
+  const backToMenuFromMockExam = () => {
+    const confirmed = window.confirm(
+      "本番模擬を中断してトップへ戻ります。よろしいですか？"
+    );
+
+    if (!confirmed) return;
+
+    backToMenu();
   };
 
   const resetLearningHistory = () => {
@@ -953,51 +973,67 @@ function App() {
             </div>
           )}
 
-          <div className="menu-buttons">
-            <button
-              type="button"
-              className="button primary"
-              onClick={() => openPracticeSetup("true_false_setup")}
-              disabled={trueFalseQuestions.length === 0}
-            >
-              ○×演習
-            </button>
+          <div className="menu-section">
+            <h3 className="menu-section-title">演習</h3>
+            <div className="menu-buttons">
+              <button
+                type="button"
+                className="button primary"
+                onClick={() => openPracticeSetup("true_false_setup")}
+                disabled={trueFalseQuestions.length === 0}
+              >
+                ○×演習
+              </button>
 
-            <button
-              type="button"
-              className="button primary"
-              onClick={() => openPracticeSetup("multiple_choice_setup")}
-              disabled={multipleChoiceQuestions.length === 0}
-            >
-              択一演習
-            </button>
+              <button
+                type="button"
+                className="button primary"
+                onClick={() => openPracticeSetup("multiple_choice_setup")}
+                disabled={multipleChoiceQuestions.length === 0}
+              >
+                択一演習
+              </button>
 
-            <button
-              type="button"
-              className="button primary"
-              onClick={() => startMode("mock_exam")}
-              disabled={targetMockQuestionCount === 0}
-            >
-              本番模擬
-            </button>
+              <button
+                type="button"
+                className="button primary"
+                onClick={startMockExamWithConfirm}
+                disabled={targetMockQuestionCount === 0}
+              >
+                本番模擬
+              </button>
 
-            <button
-              type="button"
-              className="button primary"
-              onClick={() => startMode("wrong_review")}
-              disabled={wrongQuestions.length === 0}
-            >
-              誤答復習
-            </button>
+              <button
+                type="button"
+                className="button primary"
+                onClick={() => startMode("wrong_review")}
+                disabled={wrongQuestions.length === 0}
+              >
+                誤答復習
+              </button>
+            </div>
+          </div>
 
-            <button
-              type="button"
-              className="button primary"
-              onClick={openQuestionList}
-              disabled={allQuestions.length === 0}
-            >
-              問題一覧
-            </button>
+          <div className="menu-section">
+            <h3 className="menu-section-title">確認</h3>
+            <div className="menu-buttons menu-buttons-secondary">
+              <button
+                type="button"
+                className="button primary"
+                onClick={openLearningHistory}
+              >
+                学習履歴を確認
+              </button>
+
+              <button
+                type="button"
+                className="button primary"
+                onClick={openQuestionList}
+                disabled={allQuestions.length === 0}
+              >
+                問題一覧
+              </button>
+            </div>
           </div>
         </section>
 
@@ -1010,14 +1046,6 @@ function App() {
           </p>
 
           <div className="action-row">
-            <button
-              type="button"
-              className="button primary"
-              onClick={openLearningHistory}
-            >
-              学習履歴を確認
-            </button>
-
             <button
               type="button"
               className="button secondary"
@@ -1051,10 +1079,7 @@ function App() {
 
   if (mode === "question_list") {
     return (
-      <QuestionListScreen
-        questions={allQuestions}
-        onBackToMenu={backToMenu}
-      />
+      <QuestionListScreen questions={allQuestions} onBackToMenu={backToMenu} />
     );
   }
 
@@ -1204,7 +1229,7 @@ function App() {
       onSelectTrueFalse={handleMockSelectTrueFalse}
       onSelectChoice={handleMockSelectChoice}
       onUnansweredNext={handleMockUnansweredNext}
-      onBackToMenu={backToMenu}
+      onBackToMenu={backToMenuFromMockExam}
     />
   );
 }
@@ -1494,7 +1519,11 @@ function LearningHistoryScreen({ questions, learningHistory, onBackToMenu }) {
       </section>
 
       <div className="action-row">
-        <button type="button" className="button secondary" onClick={onBackToMenu}>
+        <button
+          type="button"
+          className="button secondary"
+          onClick={onBackToMenu}
+        >
           トップへ戻る
         </button>
       </div>
@@ -1736,7 +1765,11 @@ function QuestionListScreen({ questions, onBackToMenu }) {
       </section>
 
       <div className="action-row">
-        <button type="button" className="button secondary" onClick={onBackToMenu}>
+        <button
+          type="button"
+          className="button secondary"
+          onClick={onBackToMenu}
+        >
           トップへ戻る
         </button>
       </div>
