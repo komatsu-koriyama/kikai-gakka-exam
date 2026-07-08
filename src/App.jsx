@@ -24,6 +24,7 @@ const STORAGE_KEY = "kikaiGakkaExamLearningHistory";
 const EMPTY_HISTORY = {
   questionStats: {},
   wrongQuestionIds: [],
+  mockExamAttempts: [],
 };
 
 function shuffleArray(array) {
@@ -72,6 +73,9 @@ function loadLearningHistory() {
       wrongQuestionIds: Array.isArray(parsed.wrongQuestionIds)
         ? parsed.wrongQuestionIds
         : [],
+      mockExamAttempts: Array.isArray(parsed.mockExamAttempts)
+        ? parsed.mockExamAttempts
+        : [],
     };
   } catch {
     return EMPTY_HISTORY;
@@ -93,11 +97,44 @@ function formatDateTime(date) {
   return `${yyyy}/${mm}/${dd} ${hh}:${mi}:${ss}`;
 }
 
+function formatDuration(startedAt, finishedAt) {
+  if (!startedAt || !finishedAt) return "";
+
+  const diffMs = finishedAt.getTime() - startedAt.getTime();
+  const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
+  return formatSeconds(totalSeconds);
+}
+
+function formatSeconds(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined) return "";
+
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+
+  return `${minutes}分${seconds}秒`;
+}
+
+function getAccuracyPercent(correct, total) {
+  if (!total) return 0;
+  return (correct / total) * 100;
+}
+
+function formatLastResult(lastResult) {
+  if (lastResult === "correct") return "正解";
+  if (lastResult === "wrong") return "不正解";
+  if (lastResult === "unanswered") return "無回答";
+  return "-";
+}
+
 function updateHistoryWithResults(currentHistory, results, options = {}) {
   const isReviewMode = options.isReviewMode ?? false;
   const nextHistory = {
     questionStats: { ...currentHistory.questionStats },
     wrongQuestionIds: [...currentHistory.wrongQuestionIds],
+    mockExamAttempts: Array.isArray(currentHistory.mockExamAttempts)
+      ? [...currentHistory.mockExamAttempts]
+      : [],
   };
 
   const wrongIdSet = new Set(nextHistory.wrongQuestionIds);
@@ -202,6 +239,37 @@ function buildUnansweredResult(question) {
     isCorrect: false,
     isUnanswered: true,
     score: 0,
+  };
+}
+
+function buildMockExamAttempt(questions, results, startedAt, finishedAt) {
+  const correctCount = results.filter((result) => result.isCorrect).length;
+  const wrongCount = results.filter(
+    (result) => !result.isCorrect && !result.isUnanswered
+  ).length;
+  const unansweredCount = results.filter((result) => result.isUnanswered).length;
+  const totalScore = results.reduce((sum, result) => sum + result.score, 0);
+  const maxScore = questions.reduce(
+    (sum, question) => sum + getQuestionMaxScore(question),
+    0
+  );
+  const questionCount = questions.length;
+  const durationSeconds =
+    startedAt && finishedAt
+      ? Math.max(0, Math.floor((finishedAt.getTime() - startedAt.getTime()) / 1000))
+      : 0;
+
+  return {
+    id: `mock-${finishedAt.toISOString()}`,
+    answeredAt: formatDateTime(finishedAt),
+    questionCount,
+    correct: correctCount,
+    wrong: wrongCount,
+    unanswered: unansweredCount,
+    score: Number(totalScore.toFixed(1)),
+    maxScore: Number(maxScore.toFixed(1)),
+    accuracy: Number(getAccuracyPercent(correctCount, questionCount).toFixed(1)),
+    durationSeconds,
   };
 }
 
@@ -464,6 +532,7 @@ function App() {
     mode !== "menu" &&
     mode !== "true_false_setup" &&
     mode !== "multiple_choice_setup" &&
+    mode !== "learning_history" &&
     activeQuestions.length > 0 &&
     currentIndex >= activeQuestions.length;
 
@@ -515,6 +584,37 @@ function App() {
     });
   };
 
+  const persistMockExamResults = (completedResults, completedAt) => {
+    setLearningHistory((prevHistory) => {
+      const historyWithQuestionStats = updateHistoryWithResults(
+        prevHistory,
+        completedResults,
+        {
+          isReviewMode: false,
+        }
+      );
+
+      const mockExamAttempt = buildMockExamAttempt(
+        mockQuestions,
+        completedResults,
+        startedAt,
+        completedAt
+      );
+
+      const nextHistory = {
+        ...historyWithQuestionStats,
+        mockExamAttempts: [
+          ...(historyWithQuestionStats.mockExamAttempts ?? []),
+          mockExamAttempt,
+        ],
+      };
+
+      saveLearningHistory(nextHistory);
+
+      return nextHistory;
+    });
+  };
+
   const resetPracticeState = () => {
     setCurrentIndex(0);
     setSelectedAnswer(null);
@@ -541,6 +641,18 @@ function App() {
     setReviewQuestions([]);
     setMockReviewQuestions([]);
     setMode(setupMode);
+  };
+
+  const openLearningHistory = () => {
+    resetPracticeState();
+    resetSetupState();
+    setPracticeQuestions([]);
+    setMockQuestions([]);
+    setMockAnswerRecords([]);
+    setIsFullMockExam(false);
+    setReviewQuestions([]);
+    setMockReviewQuestions([]);
+    setMode("learning_history");
   };
 
   const buildConfiguredPracticeQuestions = (sourceQuestions) => {
@@ -681,14 +793,16 @@ function App() {
   };
 
   const finishMockExam = (answerRecords) => {
+    const completedAt = new Date();
     const completedResults = mockQuestions.map((question, index) => {
       return answerRecords[index] ?? buildUnansweredResult(question);
     });
 
     setResults(completedResults);
-    persistResults(completedResults, "mock_exam");
+    persistMockExamResults(completedResults, completedAt);
     setSelectedAnswer(null);
     setSelectedChoiceId(null);
+    setFinishedAt(completedAt);
     setCurrentIndex(mockQuestions.length);
   };
 
@@ -870,14 +984,24 @@ function App() {
             不正解または無回答の問題は誤答復習対象になります。誤答復習で2回連続正解すると復習対象から外れます。
           </p>
 
-          <button
-            type="button"
-            className="button secondary"
-            onClick={resetLearningHistory}
-            disabled={totalAttempts === 0 && wrongQuestions.length === 0}
-          >
-            学習履歴をリセット
-          </button>
+          <div className="action-row">
+            <button
+              type="button"
+              className="button primary"
+              onClick={openLearningHistory}
+            >
+              学習履歴を確認
+            </button>
+
+            <button
+              type="button"
+              className="button secondary"
+              onClick={resetLearningHistory}
+              disabled={totalAttempts === 0 && wrongQuestions.length === 0}
+            >
+              学習履歴をリセット
+            </button>
+          </div>
         </section>
 
         <section className="card">
@@ -887,6 +1011,16 @@ function App() {
           <p>合計点がマイナスになった場合も、そのまま表示します。</p>
         </section>
       </main>
+    );
+  }
+
+  if (mode === "learning_history") {
+    return (
+      <LearningHistoryScreen
+        questions={allQuestions}
+        learningHistory={learningHistory}
+        onBackToMenu={backToMenu}
+      />
     );
   }
 
@@ -1038,6 +1172,297 @@ function App() {
       onUnansweredNext={handleMockUnansweredNext}
       onBackToMenu={backToMenu}
     />
+  );
+}
+
+function LearningHistoryScreen({ questions, learningHistory, onBackToMenu }) {
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [lowAccuracyOnly, setLowAccuracyOnly] = useState(false);
+  const [wrongTargetOnly, setWrongTargetOnly] = useState(false);
+  const [hasUnansweredOnly, setHasUnansweredOnly] = useState(false);
+
+  const questionMap = new Map(questions.map((question) => [question.id, question]));
+  const wrongIdSet = new Set(learningHistory.wrongQuestionIds ?? []);
+  const questionStats = learningHistory.questionStats ?? {};
+  const mockExamAttempts = learningHistory.mockExamAttempts ?? [];
+
+  const summary = Object.values(questionStats).reduce(
+    (acc, stat) => {
+      acc.attempts += stat.attempts ?? 0;
+      acc.correct += stat.correct ?? 0;
+      acc.wrong += stat.wrong ?? 0;
+      acc.unanswered += stat.unanswered ?? 0;
+      return acc;
+    },
+    {
+      attempts: 0,
+      correct: 0,
+      wrong: 0,
+      unanswered: 0,
+    }
+  );
+
+  const overallAccuracy = getAccuracyPercent(summary.correct, summary.attempts);
+
+  const rows = Object.entries(questionStats)
+    .map(([questionId, stat]) => {
+      const question = questionMap.get(questionId);
+      const attempts = stat.attempts ?? 0;
+      const correct = stat.correct ?? 0;
+      const wrong = stat.wrong ?? 0;
+      const unanswered = stat.unanswered ?? 0;
+      const accuracy = getAccuracyPercent(correct, attempts);
+      const questionText = question?.question ?? "問題データが見つかりません";
+      const preview =
+        questionText.length > 70
+          ? `${questionText.slice(0, 70)}...`
+          : questionText;
+
+      return {
+        questionId,
+        category: question ? getCategoryName(question) : "未設定",
+        preview,
+        attempts,
+        correct,
+        wrong,
+        unanswered,
+        accuracy,
+        lastResult: stat.lastResult ?? null,
+        lastAnsweredAt: stat.lastAnsweredAt ?? "-",
+        isWrongTarget: wrongIdSet.has(questionId),
+      };
+    })
+    .filter((row) => row.attempts > 0)
+    .sort((a, b) => {
+      if (a.isWrongTarget !== b.isWrongTarget) {
+        return a.isWrongTarget ? -1 : 1;
+      }
+
+      if (a.accuracy !== b.accuracy) {
+        return a.accuracy - b.accuracy;
+      }
+
+      return b.attempts - a.attempts;
+    });
+
+  const categories = Array.from(new Set(rows.map((row) => row.category))).sort(
+    (a, b) => a.localeCompare(b, "ja")
+  );
+
+  const filteredRows = rows.filter((row) => {
+    if (selectedCategory !== "all" && row.category !== selectedCategory) {
+      return false;
+    }
+
+    if (lowAccuracyOnly && row.accuracy >= 70) {
+      return false;
+    }
+
+    if (wrongTargetOnly && !row.isWrongTarget) {
+      return false;
+    }
+
+    if (hasUnansweredOnly && row.unanswered === 0) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const latestMockExamAttempts = [...mockExamAttempts].reverse();
+
+  return (
+    <main className="container">
+      <h1>学習履歴</h1>
+
+      <section className="card">
+        <h2>全体</h2>
+
+        <div className="history-summary-grid">
+          <div className="history-summary-card">
+            <span>総回答回数</span>
+            <strong>{summary.attempts}</strong>
+          </div>
+          <div className="history-summary-card">
+            <span>正解数</span>
+            <strong>{summary.correct}</strong>
+          </div>
+          <div className="history-summary-card">
+            <span>不正解数</span>
+            <strong>{summary.wrong}</strong>
+          </div>
+          <div className="history-summary-card">
+            <span>無回答数</span>
+            <strong>{summary.unanswered}</strong>
+          </div>
+          <div className="history-summary-card">
+            <span>全体正答率</span>
+            <strong>{overallAccuracy.toFixed(1)}%</strong>
+          </div>
+          <div className="history-summary-card">
+            <span>誤答復習対象数</span>
+            <strong>{wrongIdSet.size}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>本番模擬の点数推移</h2>
+        <p className="note">
+          この画面の実装後に実施した本番模擬から、回ごとの結果が記録されます。
+        </p>
+
+        {latestMockExamAttempts.length === 0 ? (
+          <p>記録された本番模擬の結果はまだありません。</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="history-table">
+              <thead>
+                <tr>
+                  <th>実施日時</th>
+                  <th>得点</th>
+                  <th>満点</th>
+                  <th>正答</th>
+                  <th>誤答</th>
+                  <th>無回答</th>
+                  <th>正答率</th>
+                  <th>所要時間</th>
+                </tr>
+              </thead>
+              <tbody>
+                {latestMockExamAttempts.map((attempt, index) => (
+                  <tr key={attempt.id ?? `${attempt.answeredAt}-${index}`}>
+                    <td>{attempt.answeredAt ?? "-"}</td>
+                    <td>{Number(attempt.score ?? 0).toFixed(1)}</td>
+                    <td>{Number(attempt.maxScore ?? 0).toFixed(1)}</td>
+                    <td>{attempt.correct ?? 0}</td>
+                    <td>{attempt.wrong ?? 0}</td>
+                    <td>{attempt.unanswered ?? 0}</td>
+                    <td>{Number(attempt.accuracy ?? 0).toFixed(1)}%</td>
+                    <td>{formatSeconds(attempt.durationSeconds)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>問題別の弱点確認</h2>
+        <p className="note">
+          正答率が低い問題は、正答率70%未満の問題として絞り込みます。
+        </p>
+
+        <div className="history-filter-panel">
+          <label className="history-filter-field">
+            <span>カテゴリ</span>
+            <select
+              value={selectedCategory}
+              onChange={(event) => setSelectedCategory(event.target.value)}
+            >
+              <option value="all">すべて</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="history-check">
+            <input
+              type="checkbox"
+              checked={lowAccuracyOnly}
+              onChange={(event) => setLowAccuracyOnly(event.target.checked)}
+            />
+            <span>正答率が低い問題</span>
+          </label>
+
+          <label className="history-check">
+            <input
+              type="checkbox"
+              checked={wrongTargetOnly}
+              onChange={(event) => setWrongTargetOnly(event.target.checked)}
+            />
+            <span>誤答復習対象</span>
+          </label>
+
+          <label className="history-check">
+            <input
+              type="checkbox"
+              checked={hasUnansweredOnly}
+              onChange={(event) => setHasUnansweredOnly(event.target.checked)}
+            />
+            <span>未回答を含む問題</span>
+          </label>
+        </div>
+
+        <p className="note">表示件数：{filteredRows.length}件</p>
+
+        {filteredRows.length === 0 ? (
+          <p>条件に一致する履歴はありません。</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="history-table">
+              <thead>
+                <tr>
+                  <th>問題ID</th>
+                  <th>カテゴリ</th>
+                  <th>問題文</th>
+                  <th>回答</th>
+                  <th>正解</th>
+                  <th>不正解</th>
+                  <th>無回答</th>
+                  <th>正答率</th>
+                  <th>最後の結果</th>
+                  <th>最終回答日時</th>
+                  <th>復習対象</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row) => (
+                  <tr
+                    key={row.questionId}
+                    className={
+                      row.isWrongTarget
+                        ? "history-row-target"
+                        : row.accuracy < 70
+                        ? "history-row-low"
+                        : ""
+                    }
+                  >
+                    <td>{row.questionId}</td>
+                    <td>{row.category}</td>
+                    <td className="history-question-preview">{row.preview}</td>
+                    <td>{row.attempts}</td>
+                    <td>{row.correct}</td>
+                    <td>{row.wrong}</td>
+                    <td>{row.unanswered}</td>
+                    <td>{row.accuracy.toFixed(1)}%</td>
+                    <td>{formatLastResult(row.lastResult)}</td>
+                    <td>{row.lastAnsweredAt}</td>
+                    <td>
+                      {row.isWrongTarget ? (
+                        <span className="history-badge danger">対象</span>
+                      ) : (
+                        <span className="history-badge muted">-</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <div className="action-row">
+        <button type="button" className="button secondary" onClick={onBackToMenu}>
+          トップへ戻る
+        </button>
+      </div>
+    </main>
   );
 }
 
@@ -1993,23 +2418,13 @@ function buildMockExamReviewQuestions(questions, results) {
   });
 }
 
-function formatDuration(startedAt, finishedAt) {
-  if (!startedAt || !finishedAt) return "";
-
-  const diffMs = finishedAt.getTime() - startedAt.getTime();
-  const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  return `${minutes}分${seconds}秒`;
-}
-
 function getModeTitle(mode) {
   if (mode === "true_false") return "○×演習";
   if (mode === "multiple_choice") return "択一演習";
   if (mode === "mock_exam") return "本番模擬";
   if (mode === "wrong_review") return "誤答復習";
   if (mode === "mock_exam_review") return "今回間違えた問題の復習";
+  if (mode === "learning_history") return "学習履歴";
   return "学科試験演習アプリ";
 }
 
