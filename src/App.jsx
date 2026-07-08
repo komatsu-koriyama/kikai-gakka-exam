@@ -1,1383 +1,1124 @@
+// src/App.jsx
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
+const HISTORY_STORAGE_KEY = "kikaiGakkaExamLearningHistory";
 const SHOW_DEBUG_INFO = false;
 
-const SCORE_RULES = {
-  true_false: {
-    correct: 0.2,
-    wrong: -0.2,
-  },
-  multiple_choice: {
-    correct: 0.4,
-    wrong: -0.4,
-  },
-};
+const TRUE_FALSE_SCORE = 0.2;
+const MULTIPLE_CHOICE_SCORE = 0.4;
 
-const MOCK_EXAM_RULE = {
-  trueFalseCount: 60,
-  multipleChoiceCount: 10,
-};
+const LOW_ACCURACY_THRESHOLD = 70;
 
-const STORAGE_KEY = "kikaiGakkaExamLearningHistory";
-
-const EMPTY_HISTORY = {
+const DEFAULT_HISTORY = {
   questionStats: {},
   wrongQuestionIds: [],
   mockExamAttempts: [],
 };
 
-function shuffleArray(array) {
-  return [...array].sort(() => Math.random() - 0.5);
-}
-
-function getCategoryName(question) {
-  return question.category || "未設定";
-}
-
-function formatTrueFalse(value) {
-  if (value === null || value === undefined) return "未回答";
-  return value ? "○" : "×";
-}
-
-function getQuestionScore(question, isCorrect, isUnanswered) {
-  if (isUnanswered) return 0;
-
-  const rule = SCORE_RULES[question.type];
-
-  if (!rule) return 0;
-
-  return isCorrect ? rule.correct : rule.wrong;
-}
-
-function getQuestionMaxScore(question) {
-  const rule = SCORE_RULES[question.type];
-
-  if (!rule) return 0;
-
-  return rule.correct;
-}
-
-function loadLearningHistory() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-
-    if (!raw) {
-      return EMPTY_HISTORY;
-    }
-
-    const parsed = JSON.parse(raw);
-
-    return {
-      questionStats: parsed.questionStats ?? {},
-      wrongQuestionIds: Array.isArray(parsed.wrongQuestionIds)
-        ? parsed.wrongQuestionIds
-        : [],
-      mockExamAttempts: Array.isArray(parsed.mockExamAttempts)
-        ? parsed.mockExamAttempts
-        : [],
-    };
-  } catch {
-    return EMPTY_HISTORY;
-  }
-}
-
-function saveLearningHistory(history) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-}
-
-function formatDateTime(date) {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  const hh = String(date.getHours()).padStart(2, "0");
-  const mi = String(date.getMinutes()).padStart(2, "0");
-  const ss = String(date.getSeconds()).padStart(2, "0");
-
-  return `${yyyy}/${mm}/${dd} ${hh}:${mi}:${ss}`;
-}
-
-function formatDuration(startedAt, finishedAt) {
-  if (!startedAt || !finishedAt) return "";
-
-  const diffMs = finishedAt.getTime() - startedAt.getTime();
-  const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
-  return formatSeconds(totalSeconds);
-}
-
-function formatSeconds(totalSeconds) {
-  if (totalSeconds === null || totalSeconds === undefined) return "";
-
-  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
-  const minutes = Math.floor(safeSeconds / 60);
-  const seconds = safeSeconds % 60;
-
-  return `${minutes}分${seconds}秒`;
-}
-
-function getAccuracyPercent(correct, total) {
-  if (!total) return 0;
-  return (correct / total) * 100;
-}
-
-function formatLastResult(lastResult) {
-  if (lastResult === "correct") return "正解";
-  if (lastResult === "wrong") return "不正解";
-  if (lastResult === "unanswered") return "無回答";
-  return "-";
-}
-
-function updateHistoryWithResults(currentHistory, results, options = {}) {
-  const isReviewMode = options.isReviewMode ?? false;
-  const nextHistory = {
-    questionStats: { ...currentHistory.questionStats },
-    wrongQuestionIds: [...currentHistory.wrongQuestionIds],
-    mockExamAttempts: Array.isArray(currentHistory.mockExamAttempts)
-      ? [...currentHistory.mockExamAttempts]
-      : [],
-  };
-
-  const wrongIdSet = new Set(nextHistory.wrongQuestionIds);
-
-  results.forEach((result) => {
-    const questionId = result.questionId;
-    const currentStats = nextHistory.questionStats[questionId] ?? {
-      attempts: 0,
-      correct: 0,
-      wrong: 0,
-      unanswered: 0,
-      lastResult: null,
-      consecutiveCorrect: 0,
-      lastAnsweredAt: null,
-    };
-
-    const lastResult = result.isUnanswered
-      ? "unanswered"
-      : result.isCorrect
-      ? "correct"
-      : "wrong";
-
-    const nextStats = {
-      ...currentStats,
-      attempts: currentStats.attempts + 1,
-      correct: currentStats.correct + (result.isCorrect ? 1 : 0),
-      wrong:
-        currentStats.wrong +
-        (!result.isCorrect && !result.isUnanswered ? 1 : 0),
-      unanswered: currentStats.unanswered + (result.isUnanswered ? 1 : 0),
-      lastResult,
-      consecutiveCorrect: result.isCorrect
-        ? currentStats.consecutiveCorrect + 1
-        : 0,
-      lastAnsweredAt: formatDateTime(new Date()),
-    };
-
-    nextHistory.questionStats[questionId] = nextStats;
-
-    if (result.isCorrect) {
-      if (isReviewMode && nextStats.consecutiveCorrect >= 2) {
-        wrongIdSet.delete(questionId);
-      }
-    } else {
-      wrongIdSet.add(questionId);
-    }
-  });
-
-  nextHistory.wrongQuestionIds = Array.from(wrongIdSet);
-
-  return nextHistory;
-}
-
-function buildTrueFalseResult(question, answer) {
-  const isCorrect = answer === question.answer;
-  const score = getQuestionScore(question, isCorrect, false);
-
-  return {
-    questionId: question.id,
-    type: question.type,
-    selectedAnswer: answer,
-    selectedChoiceId: null,
-    correctAnswer: question.answer,
-    correctChoiceId: null,
-    isCorrect,
-    isUnanswered: false,
-    score,
-  };
-}
-
-function buildMultipleChoiceResult(question, choiceId) {
-  const correctChoice = question.choices.find((choice) => choice.isCorrect);
-  const isCorrect = choiceId === correctChoice?.id;
-  const score = getQuestionScore(question, isCorrect, false);
-
-  return {
-    questionId: question.id,
-    type: question.type,
-    selectedAnswer: null,
-    selectedChoiceId: choiceId,
-    correctAnswer: null,
-    correctChoiceId: correctChoice?.id ?? "",
-    isCorrect,
-    isUnanswered: false,
-    score,
-  };
-}
-
-function buildUnansweredResult(question) {
-  const correctChoice =
-    question.type === "multiple_choice"
-      ? question.choices.find((choice) => choice.isCorrect)
-      : null;
-
-  return {
-    questionId: question.id,
-    type: question.type,
-    selectedAnswer: null,
-    selectedChoiceId: null,
-    correctAnswer: question.type === "true_false" ? question.answer : null,
-    correctChoiceId: correctChoice?.id ?? null,
-    isCorrect: false,
-    isUnanswered: true,
-    score: 0,
-  };
-}
-
-function buildMockExamAttempt(questions, results, startedAt, finishedAt) {
-  const correctCount = results.filter((result) => result.isCorrect).length;
-  const wrongCount = results.filter(
-    (result) => !result.isCorrect && !result.isUnanswered
-  ).length;
-  const unansweredCount = results.filter((result) => result.isUnanswered).length;
-  const totalScore = results.reduce((sum, result) => sum + result.score, 0);
-  const maxScore = questions.reduce(
-    (sum, question) => sum + getQuestionMaxScore(question),
-    0
-  );
-  const questionCount = questions.length;
-  const durationSeconds =
-    startedAt && finishedAt
-      ? Math.max(
-          0,
-          Math.floor((finishedAt.getTime() - startedAt.getTime()) / 1000)
-        )
-      : 0;
-
-  return {
-    id: `mock-${finishedAt.toISOString()}`,
-    answeredAt: formatDateTime(finishedAt),
-    questionCount,
-    correct: correctCount,
-    wrong: wrongCount,
-    unanswered: unansweredCount,
-    score: Number(totalScore.toFixed(1)),
-    maxScore: Number(maxScore.toFixed(1)),
-    accuracy: Number(getAccuracyPercent(correctCount, questionCount).toFixed(1)),
-    durationSeconds,
-  };
-}
-
-function buildCategoryAllocation(questions, targetCount) {
-  const categoryCounts = new Map();
-
-  questions.forEach((question) => {
-    const category = getCategoryName(question);
-    categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
-  });
-
-  const totalCount = questions.length;
-
-  if (totalCount === 0 || targetCount <= 0) {
-    return new Map();
-  }
-
-  const entries = Array.from(categoryCounts.entries()).map(
-    ([category, available]) => {
-      const exact = (available / totalCount) * targetCount;
-
-      return {
-        category,
-        available,
-        exact,
-        base: Math.min(Math.floor(exact), available),
-        remainder: exact - Math.floor(exact),
-      };
-    }
-  );
-
-  const allocation = new Map();
-
-  entries.forEach((entry) => {
-    allocation.set(entry.category, entry.base);
-  });
-
-  let allocatedCount = entries.reduce((sum, entry) => sum + entry.base, 0);
-  let remainingCount = targetCount - allocatedCount;
-
-  const sortedEntries = [...entries].sort((a, b) => {
-    if (b.remainder !== a.remainder) {
-      return b.remainder - a.remainder;
-    }
-
-    if (b.available !== a.available) {
-      return b.available - a.available;
-    }
-
-    return a.category.localeCompare(b.category, "ja");
-  });
-
-  while (remainingCount > 0) {
-    let added = false;
-
-    for (const entry of sortedEntries) {
-      const current = allocation.get(entry.category) ?? 0;
-
-      if (current < entry.available) {
-        allocation.set(entry.category, current + 1);
-        allocatedCount += 1;
-        remainingCount -= 1;
-        added = true;
-
-        if (remainingCount === 0) {
-          break;
-        }
-      }
-    }
-
-    if (!added) {
-      break;
-    }
-  }
-
-  return allocation;
-}
-
-function selectQuestionsByCategoryRatio(questions, targetCount) {
-  if (questions.length <= targetCount) {
-    return shuffleArray(questions);
-  }
-
-  const allocation = buildCategoryAllocation(questions, targetCount);
-  const groupedQuestions = new Map();
-
-  questions.forEach((question) => {
-    const category = getCategoryName(question);
-
-    if (!groupedQuestions.has(category)) {
-      groupedQuestions.set(category, []);
-    }
-
-    groupedQuestions.get(category).push(question);
-  });
-
-  const selectedQuestions = [];
-
-  allocation.forEach((count, category) => {
-    const group = shuffleArray(groupedQuestions.get(category) ?? []);
-    selectedQuestions.push(...group.slice(0, count));
-  });
-
-  if (selectedQuestions.length < targetCount) {
-    const selectedIdSet = new Set(
-      selectedQuestions.map((question) => question.id)
-    );
-
-    const remainingQuestions = shuffleArray(
-      questions.filter((question) => !selectedIdSet.has(question.id))
-    );
-
-    selectedQuestions.push(
-      ...remainingQuestions.slice(0, targetCount - selectedQuestions.length)
-    );
-  }
-
-  return shuffleArray(selectedQuestions.slice(0, targetCount));
-}
-
-function buildMockExamQuestions(trueFalseQuestions, multipleChoiceQuestions) {
-  const targetTrueFalseQuestions = trueFalseQuestions.filter(
-    (question) => !question.isCalculation
-  );
-  const targetMultipleChoiceQuestions = multipleChoiceQuestions.filter(
-    (question) => !question.isCalculation
-  );
-
-  const canBuildFullMockExam =
-    targetTrueFalseQuestions.length >= MOCK_EXAM_RULE.trueFalseCount &&
-    targetMultipleChoiceQuestions.length >= MOCK_EXAM_RULE.multipleChoiceCount;
-
-  if (canBuildFullMockExam) {
-    const selectedTrueFalseQuestions = selectQuestionsByCategoryRatio(
-      targetTrueFalseQuestions,
-      MOCK_EXAM_RULE.trueFalseCount
-    );
-
-    const selectedMultipleChoiceQuestions = selectQuestionsByCategoryRatio(
-      targetMultipleChoiceQuestions,
-      MOCK_EXAM_RULE.multipleChoiceCount
-    );
-
-    return {
-      questions: shuffleArray([
-        ...selectedTrueFalseQuestions,
-        ...selectedMultipleChoiceQuestions,
-      ]),
-      isFullMockExam: true,
-    };
-  }
-
-  return {
-    questions: shuffleArray([
-      ...targetTrueFalseQuestions,
-      ...targetMultipleChoiceQuestions,
-    ]),
-    isFullMockExam: false,
-  };
-}
-
-function countQuestionsByType(questions) {
-  return {
-    trueFalse: questions.filter((question) => question.type === "true_false")
-      .length,
-    multipleChoice: questions.filter(
-      (question) => question.type === "multiple_choice"
-    ).length,
-  };
-}
-
 function App() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const [mode, setMode] = useState("menu");
+  const [questions, setQuestions] = useState([]);
+  const [loadState, setLoadState] = useState({
+    loading: true,
+    error: "",
+  });
 
+  const [screen, setScreen] = useState("menu");
+  const [mode, setMode] = useState(null);
+
+  const [history, setHistory] = useState(() => loadHistory());
+
+  const [setupType, setSetupType] = useState(null);
+  const [setupCategory, setSetupCategory] = useState("all");
+  const [setupCount, setSetupCount] = useState(10);
+
+  const [sessionQuestions, setSessionQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const [selectedChoiceId, setSelectedChoiceId] = useState(null);
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [results, setResults] = useState([]);
-  const [displayChoices, setDisplayChoices] = useState([]);
+  const [currentAnswer, setCurrentAnswer] = useState(null);
+  const [currentAnswered, setCurrentAnswered] = useState(false);
+  const [currentResult, setCurrentResult] = useState(null);
+  const [sessionResults, setSessionResults] = useState([]);
+  const [sessionStartedAt, setSessionStartedAt] = useState(null);
+  const [lastMockMissedQuestionIds, setLastMockMissedQuestionIds] = useState([]);
 
-  const [practiceQuestions, setPracticeQuestions] = useState([]);
-  const [mockQuestions, setMockQuestions] = useState([]);
-  const [mockAnswerRecords, setMockAnswerRecords] = useState([]);
-  const [isFullMockExam, setIsFullMockExam] = useState(false);
-  const [reviewQuestions, setReviewQuestions] = useState([]);
-  const [mockReviewQuestions, setMockReviewQuestions] = useState([]);
+  const [historyFilters, setHistoryFilters] = useState({
+    category: "all",
+    lowAccuracyOnly: false,
+    wrongOnly: false,
+    includeUnansweredOnly: false,
+  });
 
-  const [setupSelectedCategories, setSetupSelectedCategories] = useState([]);
-  const [setupQuestionCount, setSetupQuestionCount] = useState("");
+  const [questionListFilters, setQuestionListFilters] = useState({
+    keyword: "",
+    category: "all",
+    type: "all",
+    hasImage: false,
+    hasExplanationImage: false,
+    noCategory: false,
+  });
 
-  const [startedAt, setStartedAt] = useState(null);
-  const [finishedAt, setFinishedAt] = useState(null);
-  const [learningHistory, setLearningHistory] = useState(loadLearningHistory);
+  const [expandedQuestionIds, setExpandedQuestionIds] = useState(() => new Set());
 
   useEffect(() => {
-    fetch("/data/questions.json")
-      .then((response) => {
+    async function loadQuestions() {
+      try {
+        setLoadState({ loading: true, error: "" });
+
+        const response = await fetch("/data/questions.json", {
+          cache: "no-store",
+        });
+
         if (!response.ok) {
-          throw new Error("questions.json を読み込めませんでした");
+          throw new Error(`questions.json の読み込みに失敗しました。HTTP ${response.status}`);
         }
-        return response.json();
-      })
-      .then((json) => {
-        setData(json);
-      })
-      .catch((err) => {
-        setError(err.message);
-      });
+
+        const data = await response.json();
+        const loadedQuestions = Array.isArray(data?.questions) ? data.questions : [];
+
+        setQuestions(loadedQuestions.filter((question) => question));
+        setLoadState({ loading: false, error: "" });
+      } catch (error) {
+        setLoadState({
+          loading: false,
+          error: error instanceof Error ? error.message : "questions.json の読み込みに失敗しました。",
+        });
+      }
+    }
+
+    loadQuestions();
   }, []);
 
-  const trueFalseQuestions = useMemo(() => {
-    if (!data?.questions) return [];
-    return data.questions.filter((question) => question.type === "true_false");
-  }, [data]);
-
-  const multipleChoiceQuestions = useMemo(() => {
-    if (!data?.questions) return [];
-    return data.questions.filter(
-      (question) => question.type === "multiple_choice"
-    );
-  }, [data]);
-
-  const allQuestions = useMemo(() => {
-    if (!data?.questions) return [];
-    return data.questions.filter(
-      (question) =>
-        question.type === "true_false" || question.type === "multiple_choice"
-    );
-  }, [data]);
-
-  const targetMockQuestionCount = useMemo(() => {
-    return allQuestions.filter((question) => !question.isCalculation).length;
-  }, [allQuestions]);
-
-  const wrongQuestions = useMemo(() => {
-    if (!allQuestions.length) return [];
-
-    const wrongIdSet = new Set(learningHistory.wrongQuestionIds);
-
-    return allQuestions.filter((question) => wrongIdSet.has(question.id));
-  }, [allQuestions, learningHistory]);
-
-  const activeQuestions =
-    mode === "true_false" || mode === "multiple_choice"
-      ? practiceQuestions
-      : mode === "mock_exam"
-      ? mockQuestions
-      : mode === "wrong_review"
-      ? reviewQuestions
-      : mode === "mock_exam_review"
-      ? mockReviewQuestions
-      : [];
-
-  const currentQuestion = activeQuestions[currentIndex];
-
-  const isFinished =
-    mode !== "menu" &&
-    mode !== "true_false_setup" &&
-    mode !== "multiple_choice_setup" &&
-    mode !== "learning_history" &&
-    mode !== "question_list" &&
-    activeQuestions.length > 0 &&
-    currentIndex >= activeQuestions.length;
-
   useEffect(() => {
-    if (
-      (mode !== "multiple_choice" &&
-        mode !== "mock_exam" &&
-        mode !== "wrong_review" &&
-        mode !== "mock_exam_review") ||
-      currentQuestion?.type !== "multiple_choice" ||
-      !currentQuestion?.choices
-    ) {
-      setDisplayChoices([]);
-      return;
-    }
+    saveHistory(history);
+  }, [history]);
 
-    if (currentQuestion.shuffleChoices) {
-      setDisplayChoices(shuffleArray(currentQuestion.choices));
-    } else {
-      setDisplayChoices(currentQuestion.choices);
-    }
-  }, [mode, currentQuestion]);
+  const categories = useMemo(() => {
+    const values = questions
+      .map((question) => normalizeText(question.category))
+      .filter(Boolean);
 
-  useEffect(() => {
-    if (isFinished && !finishedAt) {
-      setFinishedAt(new Date());
-    }
-  }, [isFinished, finishedAt]);
+    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "ja"));
+  }, [questions]);
 
-  const persistResults = (newResults, targetMode = mode) => {
-    const shouldPersist =
-      targetMode === "true_false" ||
-      targetMode === "multiple_choice" ||
-      targetMode === "mock_exam" ||
-      targetMode === "wrong_review" ||
-      targetMode === "mock_exam_review";
+  const currentQuestion = sessionQuestions[currentIndex] ?? null;
+  const isMockExam = mode === "mock_exam";
+  const totalQuestions = sessionQuestions.length;
+  const answeredCount = sessionResults.length;
+  const progressCurrentNumber = totalQuestions === 0 ? 0 : Math.min(currentIndex + 1, totalQuestions);
+  const remainingCount = totalQuestions === 0 ? 0 : Math.max(totalQuestions - progressCurrentNumber, 0);
+  const progressPercent = totalQuestions === 0 ? 0 : Math.round((currentIndex / totalQuestions) * 100);
 
-    if (!shouldPersist || newResults.length === 0) return;
+  const topSummary = useMemo(() => {
+    const stats = Object.values(history.questionStats ?? {});
+    const totalAttempts = stats.reduce((sum, stat) => sum + Number(stat.attempts ?? 0), 0);
 
-    setLearningHistory((prevHistory) => {
-      const nextHistory = updateHistoryWithResults(prevHistory, newResults, {
-        isReviewMode:
-          targetMode === "wrong_review" || targetMode === "mock_exam_review",
-      });
+    return {
+      totalAttempts,
+      wrongReviewCount: history.wrongQuestionIds?.length ?? 0,
+    };
+  }, [history]);
 
-      saveLearningHistory(nextHistory);
+  function openSetup(type) {
+    setSetupType(type);
+    setSetupCategory("all");
+    setSetupCount(10);
+    setScreen("setup");
+  }
 
-      return nextHistory;
+  function startPracticeFromSetup() {
+    const pool = questions.filter((question) => {
+      if (question.type !== setupType) return false;
+      if (setupCategory !== "all" && normalizeText(question.category) !== setupCategory) return false;
+      return true;
     });
-  };
 
-  const persistMockExamResults = (completedResults, completedAt) => {
-    setLearningHistory((prevHistory) => {
-      const historyWithQuestionStats = updateHistoryWithResults(
-        prevHistory,
-        completedResults,
-        {
-          isReviewMode: false,
-        }
-      );
+    const count = clampNumber(Number(setupCount), 1, pool.length || 1);
+    const selected = shuffleArray(pool).slice(0, count);
 
-      const mockExamAttempt = buildMockExamAttempt(
-        mockQuestions,
-        completedResults,
-        startedAt,
-        completedAt
-      );
-
-      const nextHistory = {
-        ...historyWithQuestionStats,
-        mockExamAttempts: [
-          ...(historyWithQuestionStats.mockExamAttempts ?? []),
-          mockExamAttempt,
-        ],
-      };
-
-      saveLearningHistory(nextHistory);
-
-      return nextHistory;
+    startSession({
+      nextMode: setupType === "true_false" ? "true_false_practice" : "multiple_choice_practice",
+      selectedQuestions: selected,
     });
-  };
+  }
 
-  const resetPracticeState = () => {
-    setCurrentIndex(0);
-    setSelectedAnswer(null);
-    setSelectedChoiceId(null);
-    setIsAnswered(false);
-    setResults([]);
-    setDisplayChoices([]);
-    setStartedAt(null);
-    setFinishedAt(null);
-  };
+  function startMockExamWithConfirm() {
+    const ok = window.confirm("本番模擬を開始します。70問構成です。よろしいですか？");
+    if (!ok) return;
 
-  const resetSetupState = () => {
-    setSetupSelectedCategories([]);
-    setSetupQuestionCount("");
-  };
+    startMockExam();
+  }
 
-  const openPracticeSetup = (setupMode) => {
-    resetPracticeState();
-    resetSetupState();
-    setPracticeQuestions([]);
-    setMockQuestions([]);
-    setMockAnswerRecords([]);
-    setIsFullMockExam(false);
-    setReviewQuestions([]);
-    setMockReviewQuestions([]);
-    setMode(setupMode);
-  };
+  function startMockExam() {
+    const targetQuestions = questions.filter((question) => !question.isCalculation);
+    const trueFalsePool = targetQuestions.filter((question) => question.type === "true_false");
+    const multipleChoicePool = targetQuestions.filter((question) => question.type === "multiple_choice");
 
-  const openLearningHistory = () => {
-    resetPracticeState();
-    resetSetupState();
-    setPracticeQuestions([]);
-    setMockQuestions([]);
-    setMockAnswerRecords([]);
-    setIsFullMockExam(false);
-    setReviewQuestions([]);
-    setMockReviewQuestions([]);
-    setMode("learning_history");
-  };
+    const trueFalseSelected =
+      trueFalsePool.length >= 60 ? stratifiedSampleByCategory(trueFalsePool, 60) : shuffleArray(trueFalsePool);
 
-  const openQuestionList = () => {
-    resetPracticeState();
-    resetSetupState();
-    setPracticeQuestions([]);
-    setMockQuestions([]);
-    setMockAnswerRecords([]);
-    setIsFullMockExam(false);
-    setReviewQuestions([]);
-    setMockReviewQuestions([]);
-    setMode("question_list");
-  };
+    const multipleChoiceSelected =
+      multipleChoicePool.length >= 10
+        ? stratifiedSampleByCategory(multipleChoicePool, 10)
+        : shuffleArray(multipleChoicePool);
 
-  const buildConfiguredPracticeQuestions = (sourceQuestions) => {
-    const selectedCategorySet = new Set(setupSelectedCategories);
+    const selected = shuffleArray([...trueFalseSelected, ...multipleChoiceSelected]);
 
-    const filtered =
-      setupSelectedCategories.length === 0
-        ? sourceQuestions
-        : sourceQuestions.filter((question) =>
-            selectedCategorySet.has(getCategoryName(question))
-          );
+    startSession({
+      nextMode: "mock_exam",
+      selectedQuestions: selected,
+    });
+  }
 
-    const requestedCount = Number(setupQuestionCount);
-    const shuffled = shuffleArray(filtered);
+  function startWrongReview() {
+    const wrongIds = new Set(history.wrongQuestionIds ?? []);
+    const selected = questions.filter((question) => wrongIds.has(question.id));
 
-    if (!requestedCount || requestedCount <= 0) {
-      return shuffled;
-    }
+    startSession({
+      nextMode: "wrong_review",
+      selectedQuestions: selected,
+    });
+  }
 
-    return shuffled.slice(0, Math.min(requestedCount, shuffled.length));
-  };
+  function startLastMockMissedReview() {
+    const missedIds = new Set(lastMockMissedQuestionIds);
+    const selected = questions.filter((question) => missedIds.has(question.id));
 
-  const startConfiguredPractice = (practiceMode) => {
-    const sourceQuestions =
-      practiceMode === "true_false"
-        ? trueFalseQuestions
-        : multipleChoiceQuestions;
+    startSession({
+      nextMode: "last_mock_missed_review",
+      selectedQuestions: selected,
+    });
+  }
 
-    const configuredQuestions = buildConfiguredPracticeQuestions(sourceQuestions);
-
-    if (configuredQuestions.length === 0) {
-      window.alert("条件に一致する問題がありません。");
-      return;
-    }
-
-    resetPracticeState();
-    setPracticeQuestions(configuredQuestions);
-    setMockQuestions([]);
-    setMockAnswerRecords([]);
-    setIsFullMockExam(false);
-    setReviewQuestions([]);
-    setMockReviewQuestions([]);
-    setMode(practiceMode);
-    setStartedAt(new Date());
-  };
-
-  const startMode = (nextMode) => {
-    resetPracticeState();
-    resetSetupState();
+  function startSession({ nextMode, selectedQuestions }) {
     setMode(nextMode);
-    setStartedAt(new Date());
+    setSessionQuestions(selectedQuestions);
+    setCurrentIndex(0);
+    setCurrentAnswer(null);
+    setCurrentAnswered(false);
+    setCurrentResult(null);
+    setSessionResults([]);
+    setSessionStartedAt(Date.now());
+    setScreen("practice");
+  }
 
-    if (nextMode === "mock_exam") {
-      const mockExam = buildMockExamQuestions(
-        trueFalseQuestions,
-        multipleChoiceQuestions
-      );
+  function backToMenu() {
+    resetSessionState();
+    setScreen("menu");
+  }
 
-      setMockQuestions(mockExam.questions);
-      setIsFullMockExam(mockExam.isFullMockExam);
-      setMockAnswerRecords([]);
-      setPracticeQuestions([]);
-      setReviewQuestions([]);
-      setMockReviewQuestions([]);
-    } else if (nextMode === "wrong_review") {
-      setReviewQuestions(shuffleArray(wrongQuestions));
-      setPracticeQuestions([]);
-      setMockQuestions([]);
-      setMockAnswerRecords([]);
-      setIsFullMockExam(false);
-      setMockReviewQuestions([]);
-    } else {
-      setPracticeQuestions([]);
-      setMockQuestions([]);
-      setMockAnswerRecords([]);
-      setIsFullMockExam(false);
-      setReviewQuestions([]);
-      setMockReviewQuestions([]);
-    }
-  };
-
-  const startMockExamWithConfirm = () => {
-    const confirmed = window.confirm(
-      "本番模擬を開始します。70問構成です。よろしいですか？"
-    );
-
-    if (!confirmed) return;
-
-    startMode("mock_exam");
-  };
-
-  const startMockExamReview = (reviewTargets) => {
-    resetPracticeState();
-    resetSetupState();
-    setMode("mock_exam_review");
-    setMockReviewQuestions(shuffleArray(reviewTargets));
-    setPracticeQuestions([]);
-    setMockQuestions([]);
-    setMockAnswerRecords([]);
-    setIsFullMockExam(false);
-    setReviewQuestions([]);
-    setStartedAt(new Date());
-  };
-
-  const backToMenu = () => {
-    resetPracticeState();
-    resetSetupState();
-    setPracticeQuestions([]);
-    setMockQuestions([]);
-    setMockAnswerRecords([]);
-    setIsFullMockExam(false);
-    setReviewQuestions([]);
-    setMockReviewQuestions([]);
-    setMode("menu");
-  };
-
-  const backToMenuFromMockExam = () => {
-    const confirmed = window.confirm(
-      "本番模擬を中断してトップへ戻ります。よろしいですか？"
-    );
-
-    if (!confirmed) return;
+  function backToMenuFromMockExam() {
+    const ok = window.confirm("本番模擬を中断してトップへ戻ります。よろしいですか？");
+    if (!ok) return;
 
     backToMenu();
-  };
+  }
 
-  const resetLearningHistory = () => {
-    const confirmed = window.confirm(
-      "学習履歴と誤答復習リストをすべて削除します。よろしいですか？"
-    );
+  function resetSessionState() {
+    setMode(null);
+    setSetupType(null);
+    setSessionQuestions([]);
+    setCurrentIndex(0);
+    setCurrentAnswer(null);
+    setCurrentAnswered(false);
+    setCurrentResult(null);
+    setSessionResults([]);
+    setSessionStartedAt(null);
+  }
 
-    if (!confirmed) return;
+  function handleAnswer(answer) {
+    if (!currentQuestion || currentAnswered) return;
 
-    localStorage.removeItem(STORAGE_KEY);
-    setLearningHistory(EMPTY_HISTORY);
-  };
-
-  const handleTrueFalseAnswer = (answer) => {
-    if (isAnswered || !currentQuestion) return;
-
-    const result = buildTrueFalseResult(currentQuestion, answer);
-
-    setSelectedAnswer(answer);
-    setIsAnswered(true);
-    setResults((prev) => [...prev, result]);
-    persistResults([result]);
-  };
-
-  const handleMultipleChoiceAnswer = (choice) => {
-    if (isAnswered || !currentQuestion) return;
-
-    const result = buildMultipleChoiceResult(currentQuestion, choice.id);
-
-    setSelectedChoiceId(choice.id);
-    setIsAnswered(true);
-    setResults((prev) => [...prev, result]);
-    persistResults([result]);
-  };
-
-  const finishMockExam = (answerRecords) => {
-    const completedAt = new Date();
-    const completedResults = mockQuestions.map((question, index) => {
-      return answerRecords[index] ?? buildUnansweredResult(question);
-    });
-
-    setResults(completedResults);
-    persistMockExamResults(completedResults, completedAt);
-    setSelectedAnswer(null);
-    setSelectedChoiceId(null);
-    setFinishedAt(completedAt);
-    setCurrentIndex(mockQuestions.length);
-  };
-
-  const saveMockAnswerAndMoveNext = (result) => {
-    const nextRecords = [...mockAnswerRecords];
-    nextRecords[currentIndex] = result;
-
-    setMockAnswerRecords(nextRecords);
-
-    if (currentIndex + 1 >= mockQuestions.length) {
-      finishMockExam(nextRecords);
+    if (isMockExam) {
+      submitCurrentAnswer(answer, true);
       return;
     }
 
-    setSelectedAnswer(null);
-    setSelectedChoiceId(null);
-    setCurrentIndex((prev) => prev + 1);
-  };
+    const result = buildAnswerResult(currentQuestion, answer);
+    setCurrentAnswer(answer);
+    setCurrentAnswered(true);
+    setCurrentResult(result);
+    setSessionResults((prev) => [...prev, result]);
+    setHistory((prev) => updateLearningHistory(prev, result));
+  }
 
-  const handleMockSelectTrueFalse = (answer) => {
-    if (!currentQuestion || currentQuestion.type !== "true_false") return;
-
-    const result = buildTrueFalseResult(currentQuestion, answer);
-    saveMockAnswerAndMoveNext(result);
-  };
-
-  const handleMockSelectChoice = (choice) => {
-    if (!currentQuestion || currentQuestion.type !== "multiple_choice") return;
-
-    const result = buildMultipleChoiceResult(currentQuestion, choice.id);
-    saveMockAnswerAndMoveNext(result);
-  };
-
-  const handleMockUnansweredNext = () => {
+  function submitCurrentAnswer(answer, shouldAutoNext = false) {
     if (!currentQuestion) return;
 
-    const result = buildUnansweredResult(currentQuestion);
-    saveMockAnswerAndMoveNext(result);
-  };
+    const result = buildAnswerResult(currentQuestion, answer);
+    const nextResults = [...sessionResults, result];
 
-  const handleReviewAnswer = (result, reviewMode) => {
-    setResults((prev) => [...prev, result]);
-    persistResults([result], reviewMode);
-  };
+    setCurrentAnswer(answer);
+    setCurrentAnswered(true);
+    setCurrentResult(result);
+    setSessionResults(nextResults);
+    setHistory((prev) => updateLearningHistory(prev, result));
 
-  const handleNext = () => {
-    setSelectedAnswer(null);
-    setSelectedChoiceId(null);
-    setIsAnswered(false);
-    setCurrentIndex((prev) => prev + 1);
-  };
+    if (shouldAutoNext) {
+      goNextQuestion(nextResults);
+    }
+  }
 
-  const handleRestart = () => {
+  function handleUnanswered() {
+    if (!currentQuestion) return;
+
+    if (currentAnswered && !isMockExam) {
+      goNextQuestion(sessionResults);
+      return;
+    }
+
+    const result = buildAnswerResult(currentQuestion, null);
+    const nextResults = currentAnswered ? sessionResults : [...sessionResults, result];
+
+    if (!currentAnswered) {
+      setSessionResults(nextResults);
+      setHistory((prev) => updateLearningHistory(prev, result));
+    }
+
+    goNextQuestion(nextResults);
+  }
+
+  function goNextQuestion(results) {
+    const nextIndex = currentIndex + 1;
+
+    if (nextIndex >= sessionQuestions.length) {
+      finishSession(results);
+      return;
+    }
+
+    setCurrentIndex(nextIndex);
+    setCurrentAnswer(null);
+    setCurrentAnswered(false);
+    setCurrentResult(null);
+  }
+
+  function finishSession(results) {
+    const durationSeconds = sessionStartedAt ? Math.max(0, Math.round((Date.now() - sessionStartedAt) / 1000)) : 0;
+
     if (mode === "mock_exam") {
-      const mockExam = buildMockExamQuestions(
-        trueFalseQuestions,
-        multipleChoiceQuestions
-      );
+      const missedIds = results
+        .filter((result) => !result.isCorrect)
+        .map((result) => result.question.id);
 
-      resetPracticeState();
-      setMockQuestions(mockExam.questions);
-      setIsFullMockExam(mockExam.isFullMockExam);
-      setMockAnswerRecords([]);
-      setStartedAt(new Date());
-      return;
+      const summary = summarizeResults(results, durationSeconds);
+
+      setLastMockMissedQuestionIds(missedIds);
+      setHistory((prev) => ({
+        ...prev,
+        mockExamAttempts: [
+          ...(prev.mockExamAttempts ?? []),
+          {
+            id: createAttemptId(),
+            answeredAt: new Date().toISOString(),
+            questionCount: summary.questionCount,
+            correct: summary.correct,
+            wrong: summary.wrong,
+            unanswered: summary.unanswered,
+            score: summary.score,
+            maxScore: summary.maxScore,
+            accuracy: summary.accuracy,
+            durationSeconds,
+          },
+        ],
+      }));
     }
 
-    if (mode === "wrong_review") {
-      resetPracticeState();
-      setReviewQuestions(shuffleArray(wrongQuestions));
-      setStartedAt(new Date());
-      return;
-    }
-
-    if (mode === "mock_exam_review") {
-      resetPracticeState();
-      setMockReviewQuestions(shuffleArray(mockReviewQuestions));
-      setStartedAt(new Date());
-      return;
-    }
-
-    if (mode === "true_false" || mode === "multiple_choice") {
-      resetPracticeState();
-      setPracticeQuestions(shuffleArray(practiceQuestions));
-      setStartedAt(new Date());
-      return;
-    }
-
-    resetPracticeState();
-    setStartedAt(new Date());
-  };
-
-  if (error) {
-    return (
-      <main className="container">
-        <h1>学科試験演習アプリ</h1>
-        <p className="error">{error}</p>
-      </main>
-    );
+    setCurrentAnswer(null);
+    setCurrentAnswered(false);
+    setCurrentResult(null);
+    setScreen("result");
   }
 
-  if (!data) {
-    return (
-      <main className="container">
-        <h1>学科試験演習アプリ</h1>
-        <p>読み込み中...</p>
-      </main>
-    );
+  function resetLearningHistory() {
+    const ok = window.confirm("学習履歴をリセットします。よろしいですか？");
+    if (!ok) return;
+
+    setHistory(DEFAULT_HISTORY);
+    setLastMockMissedQuestionIds([]);
   }
 
-  if (mode === "menu") {
-    const totalAttempts = Object.values(learningHistory.questionStats).reduce(
-      (sum, stat) => sum + stat.attempts,
-      0
-    );
-
-    return (
-      <main className="container">
-        <h1>学科試験演習アプリ</h1>
-
-        <section className="card">
-          <h2>演習メニュー</h2>
-          <p>目的に合わせて演習モードを選択してください。</p>
-
-          {SHOW_DEBUG_INFO && (
-            <div className="debug-box">
-              <p>問題数：{data.questionCount}問</p>
-              <p>○×問題：{trueFalseQuestions.length}問</p>
-              <p>択一問題：{multipleChoiceQuestions.length}問</p>
-              <p>本番模擬対象問題：{targetMockQuestionCount}問</p>
-              <p>誤答復習対象：{wrongQuestions.length}問</p>
-            </div>
-          )}
-
-          <div className="menu-section">
-            <h3 className="menu-section-title">演習</h3>
-            <div className="menu-buttons">
-              <button
-                type="button"
-                className="button primary"
-                onClick={() => openPracticeSetup("true_false_setup")}
-                disabled={trueFalseQuestions.length === 0}
-              >
-                ○×演習
-              </button>
-
-              <button
-                type="button"
-                className="button primary"
-                onClick={() => openPracticeSetup("multiple_choice_setup")}
-                disabled={multipleChoiceQuestions.length === 0}
-              >
-                択一演習
-              </button>
-
-              <button
-                type="button"
-                className="button primary"
-                onClick={startMockExamWithConfirm}
-                disabled={targetMockQuestionCount === 0}
-              >
-                本番模擬
-              </button>
-
-              <button
-                type="button"
-                className="button primary"
-                onClick={() => startMode("wrong_review")}
-                disabled={wrongQuestions.length === 0}
-              >
-                誤答復習
-              </button>
-            </div>
-          </div>
-
-          <div className="menu-section">
-            <h3 className="menu-section-title">確認</h3>
-            <div className="menu-buttons menu-buttons-secondary">
-              <button
-                type="button"
-                className="button primary"
-                onClick={openLearningHistory}
-              >
-                学習履歴を確認
-              </button>
-
-              <button
-                type="button"
-                className="button primary"
-                onClick={openQuestionList}
-                disabled={allQuestions.length === 0}
-              >
-                問題一覧
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="card">
-          <h2>学習履歴</h2>
-          <p>総回答回数：{totalAttempts}回</p>
-          <p>誤答復習対象：{wrongQuestions.length}問</p>
-          <p className="note">
-            不正解または無回答の問題は誤答復習対象になります。誤答復習で2回連続正解すると復習対象から外れます。
-          </p>
-
-          <div className="action-row">
-            <button
-              type="button"
-              className="button secondary"
-              onClick={resetLearningHistory}
-              disabled={totalAttempts === 0 && wrongQuestions.length === 0}
-            >
-              学習履歴をリセット
-            </button>
-          </div>
-        </section>
-
-        <section className="card">
-          <h2>採点ルール</h2>
-          <p>○×問題：正解 +0.2点、不正解 -0.2点、無回答 0点</p>
-          <p>択一問題：正解 +0.4点、不正解 -0.4点、無回答 0点</p>
-          <p>合計点がマイナスになった場合も、そのまま表示します。</p>
-        </section>
-      </main>
-    );
+  function toggleQuestionDetail(questionId) {
+    setExpandedQuestionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
   }
 
-  if (mode === "learning_history") {
-    return (
-      <LearningHistoryScreen
-        questions={allQuestions}
-        learningHistory={learningHistory}
-        onBackToMenu={backToMenu}
-      />
-    );
-  }
+  const resultSummary = useMemo(() => {
+    const durationSeconds = sessionStartedAt ? Math.max(0, Math.round((Date.now() - sessionStartedAt) / 1000)) : 0;
+    return summarizeResults(sessionResults, durationSeconds);
+  }, [sessionResults, sessionStartedAt]);
 
-  if (mode === "question_list") {
-    return (
-      <QuestionListScreen questions={allQuestions} onBackToMenu={backToMenu} />
-    );
-  }
+  const categoryResultRows = useMemo(() => {
+    const map = new Map();
 
-  if (mode === "true_false_setup") {
-    return (
-      <PracticeSetupScreen
-        title="○×演習 設定"
-        questions={trueFalseQuestions}
-        selectedCategories={setupSelectedCategories}
-        questionCount={setupQuestionCount}
-        onChangeSelectedCategories={setSetupSelectedCategories}
-        onChangeQuestionCount={setSetupQuestionCount}
-        onStart={() => startConfiguredPractice("true_false")}
-        onBackToMenu={backToMenu}
-      />
-    );
-  }
+    sessionResults.forEach((result) => {
+      const category = normalizeText(result.question.category) || "未設定";
+      const current = map.get(category) ?? {
+        category,
+        total: 0,
+        correct: 0,
+        wrong: 0,
+        unanswered: 0,
+      };
 
-  if (mode === "multiple_choice_setup") {
-    return (
-      <PracticeSetupScreen
-        title="択一演習 設定"
-        questions={multipleChoiceQuestions}
-        selectedCategories={setupSelectedCategories}
-        questionCount={setupQuestionCount}
-        onChangeSelectedCategories={setSetupSelectedCategories}
-        onChangeQuestionCount={setSetupQuestionCount}
-        onStart={() => startConfiguredPractice("multiple_choice")}
-        onBackToMenu={backToMenu}
-      />
-    );
-  }
+      current.total += 1;
 
-  if (activeQuestions.length === 0) {
-    return (
-      <main className="container">
-        <h1>{getModeTitle(mode)}</h1>
-        <section className="card">
-          <p>対象の問題がありません。</p>
-          <button type="button" className="button" onClick={backToMenu}>
-            トップへ戻る
-          </button>
-        </section>
-      </main>
-    );
-  }
+      if (result.isUnanswered) current.unanswered += 1;
+      else if (result.isCorrect) current.correct += 1;
+      else current.wrong += 1;
 
-  if (isFinished) {
-    return (
-      <ResultScreen
-        mode={mode}
-        questions={activeQuestions}
-        results={results}
-        startedAt={startedAt}
-        finishedAt={finishedAt}
-        onRestart={handleRestart}
-        onBackToMenu={backToMenu}
-        onStartMockExamReview={startMockExamReview}
-      />
-    );
-  }
+      map.set(category, current);
+    });
 
-  if (mode === "true_false") {
-    return (
-      <TrueFalsePracticeScreen
-        currentIndex={currentIndex}
-        questions={activeQuestions}
-        currentQuestion={currentQuestion}
-        selectedAnswer={selectedAnswer}
-        isAnswered={isAnswered}
-        onAnswer={handleTrueFalseAnswer}
-        onNext={handleNext}
-        onBackToMenu={backToMenu}
-      />
-    );
-  }
+    return Array.from(map.values()).map((row) => ({
+      ...row,
+      accuracy: row.total > 0 ? Math.round((row.correct / row.total) * 1000) / 10 : 0,
+    }));
+  }, [sessionResults]);
 
-  if (mode === "multiple_choice") {
-    return (
-      <MultipleChoicePracticeScreen
-        currentIndex={currentIndex}
-        questions={activeQuestions}
-        currentQuestion={currentQuestion}
-        displayChoices={displayChoices}
-        selectedChoiceId={selectedChoiceId}
-        isAnswered={isAnswered}
-        onAnswer={handleMultipleChoiceAnswer}
-        onNext={handleNext}
-        onBackToMenu={backToMenu}
-      />
-    );
-  }
+  const historyRows = useMemo(() => {
+    return questions
+      .map((question) => {
+        const stat = history.questionStats?.[question.id];
+        const attempts = Number(stat?.attempts ?? 0);
+        const correct = Number(stat?.correct ?? 0);
+        const wrong = Number(stat?.wrong ?? 0);
+        const unanswered = Number(stat?.unanswered ?? 0);
+        const accuracy = attempts > 0 ? Math.round((correct / attempts) * 1000) / 10 : null;
 
-  if (mode === "wrong_review") {
-    return (
-      <ReviewPracticeScreen
-        title="誤答復習"
-        note="2回連続で正解すると、復習対象から外れます。"
-        currentIndex={currentIndex}
-        questions={activeQuestions}
-        currentQuestion={currentQuestion}
-        displayChoices={displayChoices}
-        selectedAnswer={selectedAnswer}
-        selectedChoiceId={selectedChoiceId}
-        isAnswered={isAnswered}
-        onSelectTrueFalse={setSelectedAnswer}
-        onSelectChoice={setSelectedChoiceId}
-        onSetIsAnswered={setIsAnswered}
-        onSaveResult={(result) => handleReviewAnswer(result, "wrong_review")}
-        onNext={handleNext}
-        onBackToMenu={backToMenu}
-      />
-    );
-  }
-
-  if (mode === "mock_exam_review") {
-    return (
-      <ReviewPracticeScreen
-        title="今回間違えた問題の復習"
-        note="直前の本番模擬で不正解または無回答だった問題を復習します。"
-        currentIndex={currentIndex}
-        questions={activeQuestions}
-        currentQuestion={currentQuestion}
-        displayChoices={displayChoices}
-        selectedAnswer={selectedAnswer}
-        selectedChoiceId={selectedChoiceId}
-        isAnswered={isAnswered}
-        onSelectTrueFalse={setSelectedAnswer}
-        onSelectChoice={setSelectedChoiceId}
-        onSetIsAnswered={setIsAnswered}
-        onSaveResult={(result) =>
-          handleReviewAnswer(result, "mock_exam_review")
+        return {
+          question,
+          attempts,
+          correct,
+          wrong,
+          unanswered,
+          accuracy,
+          lastResult: stat?.lastResult ?? "",
+          lastAnsweredAt: stat?.lastAnsweredAt ?? "",
+          isWrongReviewTarget: history.wrongQuestionIds?.includes(question.id) ?? false,
+        };
+      })
+      .filter((row) => {
+        if (historyFilters.category !== "all" && normalizeText(row.question.category) !== historyFilters.category) {
+          return false;
         }
-        onNext={handleNext}
-        onBackToMenu={backToMenu}
-      />
+
+        if (historyFilters.lowAccuracyOnly) {
+          if (row.accuracy === null || row.accuracy >= LOW_ACCURACY_THRESHOLD) return false;
+        }
+
+        if (historyFilters.wrongOnly && !row.isWrongReviewTarget) {
+          return false;
+        }
+
+        if (historyFilters.includeUnansweredOnly && row.unanswered <= 0) {
+          return false;
+        }
+
+        return true;
+      });
+  }, [questions, history, historyFilters]);
+
+  const historySummary = useMemo(() => {
+    const stats = Object.values(history.questionStats ?? {});
+    const total = stats.reduce((sum, stat) => sum + Number(stat.attempts ?? 0), 0);
+    const correct = stats.reduce((sum, stat) => sum + Number(stat.correct ?? 0), 0);
+    const wrong = stats.reduce((sum, stat) => sum + Number(stat.wrong ?? 0), 0);
+    const unanswered = stats.reduce((sum, stat) => sum + Number(stat.unanswered ?? 0), 0);
+    const accuracy = total > 0 ? Math.round((correct / total) * 1000) / 10 : 0;
+
+    return {
+      total,
+      correct,
+      wrong,
+      unanswered,
+      accuracy,
+      wrongReviewCount: history.wrongQuestionIds?.length ?? 0,
+    };
+  }, [history]);
+
+  const filteredQuestionList = useMemo(() => {
+    const keyword = questionListFilters.keyword.trim().toLowerCase();
+
+    return questions.filter((question) => {
+      const category = normalizeText(question.category);
+
+      if (keyword) {
+        const target = [
+          question.id,
+          question.type,
+          question.category,
+          question.subCategory,
+          question.question,
+          question.explanation,
+          ...(question.tags ?? []),
+          ...(question.choices ?? []).map((choice) => choice.text),
+          ...(question.choices ?? []).map((choice) => choice.explanation),
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        if (!target.includes(keyword)) return false;
+      }
+
+      if (questionListFilters.category !== "all" && category !== questionListFilters.category) {
+        return false;
+      }
+
+      if (questionListFilters.type !== "all" && question.type !== questionListFilters.type) {
+        return false;
+      }
+
+      if (questionListFilters.hasImage && !question.image) {
+        return false;
+      }
+
+      if (questionListFilters.hasExplanationImage && !question.explanationImage) {
+        return false;
+      }
+
+      if (questionListFilters.noCategory && category) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [questions, questionListFilters]);
+
+  if (loadState.loading) {
+    return (
+      <div className="app-shell">
+        <div className="loading-card">問題データを読み込み中...</div>
+      </div>
+    );
+  }
+
+  if (loadState.error) {
+    return (
+      <div className="app-shell">
+        <div className="error-card">
+          <h1>読み込みエラー</h1>
+          <p>{loadState.error}</p>
+          <p className="muted-text">public/data/questions.json を確認してください。</p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <MockExamScreen
-      currentIndex={currentIndex}
-      questions={activeQuestions}
-      currentQuestion={currentQuestion}
-      displayChoices={displayChoices}
-      isFullMockExam={isFullMockExam}
-      onSelectTrueFalse={handleMockSelectTrueFalse}
-      onSelectChoice={handleMockSelectChoice}
-      onUnansweredNext={handleMockUnansweredNext}
-      onBackToMenu={backToMenuFromMockExam}
-    />
+    <div className="app-shell">
+      <header className="app-header">
+        <div>
+          <p className="app-kicker">技能競技大会</p>
+          <h1>機械部門 学科試験演習</h1>
+        </div>
+        <div className="header-badge">
+          <span>問題数</span>
+          <strong>{questions.length}</strong>
+        </div>
+      </header>
+
+      {screen === "menu" && (
+        <MenuScreen
+          totalQuestions={questions.length}
+          topSummary={topSummary}
+          onOpenTrueFalse={() => openSetup("true_false")}
+          onOpenMultipleChoice={() => openSetup("multiple_choice")}
+          onStartMockExam={startMockExamWithConfirm}
+          onStartWrongReview={startWrongReview}
+          onOpenHistory={() => setScreen("history")}
+          onOpenQuestionList={() => setScreen("question_list")}
+          onResetHistory={resetLearningHistory}
+          canStartWrongReview={(history.wrongQuestionIds?.length ?? 0) > 0}
+        />
+      )}
+
+      {screen === "setup" && (
+        <SetupScreen
+          setupType={setupType}
+          setupCategory={setupCategory}
+          setupCount={setupCount}
+          categories={categories}
+          questionCount={questions.filter((question) => {
+            if (question.type !== setupType) return false;
+            if (setupCategory !== "all" && normalizeText(question.category) !== setupCategory) return false;
+            return true;
+          }).length}
+          onCategoryChange={setSetupCategory}
+          onCountChange={setSetupCount}
+          onStart={startPracticeFromSetup}
+          onBack={backToMenu}
+        />
+      )}
+
+      {screen === "practice" && (
+        <PracticeScreen
+          mode={mode}
+          question={currentQuestion}
+          currentIndex={currentIndex}
+          totalQuestions={totalQuestions}
+          answeredCount={answeredCount}
+          progressCurrentNumber={progressCurrentNumber}
+          remainingCount={remainingCount}
+          progressPercent={progressPercent}
+          currentAnswer={currentAnswer}
+          currentAnswered={currentAnswered}
+          currentResult={currentResult}
+          onAnswer={handleAnswer}
+          onUnanswered={handleUnanswered}
+          onBack={isMockExam ? backToMenuFromMockExam : backToMenu}
+        />
+      )}
+
+      {screen === "result" && (
+        <ResultScreen
+          mode={mode}
+          summary={resultSummary}
+          results={sessionResults}
+          categoryRows={categoryResultRows}
+          onBackToMenu={backToMenu}
+          onReviewLastMissed={startLastMockMissedReview}
+          showLastMissedReview={mode === "mock_exam" && lastMockMissedQuestionIds.length > 0}
+        />
+      )}
+
+      {screen === "history" && (
+        <HistoryScreen
+          summary={historySummary}
+          mockExamAttempts={history.mockExamAttempts ?? []}
+          rows={historyRows}
+          categories={categories}
+          filters={historyFilters}
+          onFilterChange={setHistoryFilters}
+          onBack={backToMenu}
+        />
+      )}
+
+      {screen === "question_list" && (
+        <QuestionListScreen
+          questions={filteredQuestionList}
+          categories={categories}
+          filters={questionListFilters}
+          expandedQuestionIds={expandedQuestionIds}
+          onFilterChange={setQuestionListFilters}
+          onToggleDetail={toggleQuestionDetail}
+          onBack={backToMenu}
+        />
+      )}
+    </div>
   );
 }
 
-function LearningHistoryScreen({ questions, learningHistory, onBackToMenu }) {
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [lowAccuracyOnly, setLowAccuracyOnly] = useState(false);
-  const [wrongTargetOnly, setWrongTargetOnly] = useState(false);
-  const [hasUnansweredOnly, setHasUnansweredOnly] = useState(false);
-
-  const questionMap = new Map(
-    questions.map((question) => [question.id, question])
-  );
-  const wrongIdSet = new Set(learningHistory.wrongQuestionIds ?? []);
-  const questionStats = learningHistory.questionStats ?? {};
-  const mockExamAttempts = learningHistory.mockExamAttempts ?? [];
-
-  const summary = Object.values(questionStats).reduce(
-    (acc, stat) => {
-      acc.attempts += stat.attempts ?? 0;
-      acc.correct += stat.correct ?? 0;
-      acc.wrong += stat.wrong ?? 0;
-      acc.unanswered += stat.unanswered ?? 0;
-      return acc;
-    },
-    {
-      attempts: 0,
-      correct: 0,
-      wrong: 0,
-      unanswered: 0,
-    }
-  );
-
-  const overallAccuracy = getAccuracyPercent(summary.correct, summary.attempts);
-
-  const rows = Object.entries(questionStats)
-    .map(([questionId, stat]) => {
-      const question = questionMap.get(questionId);
-      const attempts = stat.attempts ?? 0;
-      const correct = stat.correct ?? 0;
-      const wrong = stat.wrong ?? 0;
-      const unanswered = stat.unanswered ?? 0;
-      const accuracy = getAccuracyPercent(correct, attempts);
-      const questionText = question?.question ?? "問題データが見つかりません";
-      const preview =
-        questionText.length > 70
-          ? `${questionText.slice(0, 70)}...`
-          : questionText;
-
-      return {
-        questionId,
-        category: question ? getCategoryName(question) : "未設定",
-        preview,
-        attempts,
-        correct,
-        wrong,
-        unanswered,
-        accuracy,
-        lastResult: stat.lastResult ?? null,
-        lastAnsweredAt: stat.lastAnsweredAt ?? "-",
-        isWrongTarget: wrongIdSet.has(questionId),
-      };
-    })
-    .filter((row) => row.attempts > 0)
-    .sort((a, b) => {
-      if (a.isWrongTarget !== b.isWrongTarget) {
-        return a.isWrongTarget ? -1 : 1;
-      }
-
-      if (a.accuracy !== b.accuracy) {
-        return a.accuracy - b.accuracy;
-      }
-
-      return b.attempts - a.attempts;
-    });
-
-  const categories = Array.from(new Set(rows.map((row) => row.category))).sort(
-    (a, b) => a.localeCompare(b, "ja")
-  );
-
-  const filteredRows = rows.filter((row) => {
-    if (selectedCategory !== "all" && row.category !== selectedCategory) {
-      return false;
-    }
-
-    if (lowAccuracyOnly && row.accuracy >= 70) {
-      return false;
-    }
-
-    if (wrongTargetOnly && !row.isWrongTarget) {
-      return false;
-    }
-
-    if (hasUnansweredOnly && row.unanswered === 0) {
-      return false;
-    }
-
-    return true;
-  });
-
-  const latestMockExamAttempts = [...mockExamAttempts].reverse();
-
+function MenuScreen({
+  totalQuestions,
+  topSummary,
+  onOpenTrueFalse,
+  onOpenMultipleChoice,
+  onStartMockExam,
+  onStartWrongReview,
+  onOpenHistory,
+  onOpenQuestionList,
+  onResetHistory,
+  canStartWrongReview,
+}) {
   return (
-    <main className="container">
-      <h1>学習履歴</h1>
-
-      <section className="card">
-        <h2>全体</h2>
-
-        <div className="history-summary-grid">
-          <div className="history-summary-card">
-            <span>総回答回数</span>
-            <strong>{summary.attempts}</strong>
-          </div>
-          <div className="history-summary-card">
-            <span>正解数</span>
-            <strong>{summary.correct}</strong>
-          </div>
-          <div className="history-summary-card">
-            <span>不正解数</span>
-            <strong>{summary.wrong}</strong>
-          </div>
-          <div className="history-summary-card">
-            <span>無回答数</span>
-            <strong>{summary.unanswered}</strong>
-          </div>
-          <div className="history-summary-card">
-            <span>全体正答率</span>
-            <strong>{overallAccuracy.toFixed(1)}%</strong>
-          </div>
-          <div className="history-summary-card">
-            <span>誤答復習対象数</span>
-            <strong>{wrongIdSet.size}</strong>
-          </div>
+    <main className="screen">
+      <section className="summary-grid">
+        <div className="summary-card">
+          <span>登録問題数</span>
+          <strong>{totalQuestions}</strong>
+        </div>
+        <div className="summary-card">
+          <span>総回答回数</span>
+          <strong>{topSummary.totalAttempts}</strong>
+        </div>
+        <div className="summary-card">
+          <span>誤答復習対象</span>
+          <strong>{topSummary.wrongReviewCount}</strong>
         </div>
       </section>
 
-      <section className="card">
-        <h2>本番模擬の点数推移</h2>
-        <p className="note">
-          この画面の実装後に実施した本番模擬から、回ごとの結果が記録されます。
-        </p>
+      <section className="menu-section">
+        <div className="section-title-row">
+          <h2>演習</h2>
+          <p>スマートフォンでの利用を想定した演習メニューです。</p>
+        </div>
 
-        {latestMockExamAttempts.length === 0 ? (
-          <p>記録された本番模擬の結果はまだありません。</p>
+        <div className="menu-grid">
+          <button className="menu-button primary" onClick={onOpenTrueFalse}>
+            <span>○×演習</span>
+            <small>カテゴリと出題数を指定</small>
+          </button>
+
+          <button className="menu-button primary" onClick={onOpenMultipleChoice}>
+            <span>択一演習</span>
+            <small>選択肢問題を演習</small>
+          </button>
+
+          <button className="menu-button accent" onClick={onStartMockExam}>
+            <span>本番模擬</span>
+            <small>○×60問＋択一10問</small>
+          </button>
+
+          <button className="menu-button" onClick={onStartWrongReview} disabled={!canStartWrongReview}>
+            <span>誤答復習</span>
+            <small>2回連続正解で対象外</small>
+          </button>
+        </div>
+      </section>
+
+      <section className="menu-section">
+        <div className="section-title-row">
+          <h2>確認</h2>
+          <p>履歴と問題内容を確認します。</p>
+        </div>
+
+        <div className="menu-grid">
+          <button className="menu-button" onClick={onOpenHistory}>
+            <span>学習履歴を確認</span>
+            <small>点数推移・弱点確認</small>
+          </button>
+
+          <button className="menu-button" onClick={onOpenQuestionList}>
+            <span>問題一覧</span>
+            <small>検索・詳細確認</small>
+          </button>
+        </div>
+      </section>
+
+      <div className="danger-zone">
+        <button className="ghost-button danger" onClick={onResetHistory}>
+          学習履歴をリセット
+        </button>
+      </div>
+    </main>
+  );
+}
+
+function SetupScreen({
+  setupType,
+  setupCategory,
+  setupCount,
+  categories,
+  questionCount,
+  onCategoryChange,
+  onCountChange,
+  onStart,
+  onBack,
+}) {
+  const title = setupType === "true_false" ? "○×演習" : "択一演習";
+
+  return (
+    <main className="screen">
+      <div className="page-title-row">
+        <div>
+          <p className="app-kicker">演習設定</p>
+          <h2>{title}</h2>
+        </div>
+        <button className="ghost-button" onClick={onBack}>
+          トップへ戻る
+        </button>
+      </div>
+
+      <section className="panel">
+        <label className="form-field">
+          <span>カテゴリ</span>
+          <select value={setupCategory} onChange={(event) => onCategoryChange(event.target.value)}>
+            <option value="all">すべて</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="form-field">
+          <span>出題数</span>
+          <input
+            type="number"
+            min="1"
+            max={Math.max(questionCount, 1)}
+            value={setupCount}
+            onChange={(event) => onCountChange(event.target.value)}
+          />
+        </label>
+
+        <div className="setup-status">
+          対象問題数：<strong>{questionCount}</strong> 問
+        </div>
+
+        <button className="wide-button primary" onClick={onStart} disabled={questionCount === 0}>
+          演習を開始
+        </button>
+      </section>
+    </main>
+  );
+}
+
+function PracticeScreen({
+  mode,
+  question,
+  currentIndex,
+  totalQuestions,
+  answeredCount,
+  progressCurrentNumber,
+  remainingCount,
+  progressPercent,
+  currentAnswer,
+  currentAnswered,
+  currentResult,
+  onAnswer,
+  onUnanswered,
+  onBack,
+}) {
+  if (!question) {
+    return (
+      <main className="screen">
+        <div className="empty-card">
+          <h2>対象問題がありません</h2>
+          <p>条件に合う問題がありません。</p>
+          <button className="wide-button" onClick={onBack}>
+            トップへ戻る
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const isMockExam = mode === "mock_exam";
+  const modeTitle = getModeTitle(mode);
+
+  return (
+    <main className="screen practice-screen">
+      <div className="practice-top-bar">
+        <div>
+          <p className="app-kicker">{modeTitle}</p>
+          <h2>
+            {currentIndex + 1} / {totalQuestions} 問
+          </h2>
+        </div>
+        <button className="ghost-button" onClick={onBack}>
+          トップへ戻る
+        </button>
+      </div>
+
+      {isMockExam && (
+        <section className="mock-progress-card" aria-label="本番模擬の進捗">
+          <div className="mock-progress-header">
+            <div>
+              <span className="mock-progress-label">本番模擬</span>
+              <strong>
+                {progressCurrentNumber} / {totalQuestions}問
+              </strong>
+            </div>
+            <div className="mock-progress-remaining">残り {remainingCount}問</div>
+          </div>
+
+          <div className="progress-track" role="progressbar" aria-valuenow={progressPercent} aria-valuemin="0" aria-valuemax="100">
+            <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
+          </div>
+
+          <div className="mock-progress-foot">
+            <span>回答済み {answeredCount}問</span>
+            <span>{progressPercent}%</span>
+          </div>
+        </section>
+      )}
+
+      <section className="question-card">
+        <div className="question-meta-row">
+          <span className="type-pill">{question.type === "true_false" ? "○×" : "択一"}</span>
+          {!isMockExam && <span className="category-pill">{normalizeText(question.category) || "カテゴリ未設定"}</span>}
+        </div>
+
+        <p className="question-text">{question.question}</p>
+
+        {renderImage(question.image, "問題画像")}
+
+        {question.type === "true_false" ? (
+          <div className="true-false-actions">
+            <button
+              className={`answer-button tf-button ${currentAnswer === true ? "selected" : ""}`}
+              onClick={() => onAnswer(true)}
+              disabled={currentAnswered}
+            >
+              ○
+            </button>
+            <button
+              className={`answer-button tf-button ${currentAnswer === false ? "selected" : ""}`}
+              onClick={() => onAnswer(false)}
+              disabled={currentAnswered}
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <div className="choice-list">
+            {getDisplayChoices(question).map((choice) => (
+              <button
+                key={choice.id}
+                className={`answer-button choice-button ${currentAnswer === choice.id ? "selected" : ""}`}
+                onClick={() => onAnswer(choice.id)}
+                disabled={currentAnswered}
+              >
+                <span className="choice-id">{choice.id}</span>
+                <span>{choice.text}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {!isMockExam && currentAnswered && currentResult && (
+          <AnswerFeedback question={question} result={currentResult} />
+        )}
+
+        <div className="practice-actions">
+          <button className="wide-button secondary" onClick={onUnanswered}>
+            {currentAnswered && !isMockExam ? "次の問題へ" : "無回答で次へ"}
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function AnswerFeedback({ question, result }) {
+  return (
+    <div className={`feedback-card ${result.isCorrect ? "correct" : "wrong"}`}>
+      <div className="feedback-title">
+        {result.isUnanswered ? "無回答" : result.isCorrect ? "正解" : "不正解"}
+      </div>
+
+      <div className="feedback-row">
+        <span>正解</span>
+        <strong>{getCorrectAnswerText(question)}</strong>
+      </div>
+
+      <div className="feedback-row">
+        <span>問題ID</span>
+        <strong>{question.id}</strong>
+      </div>
+
+      {question.explanation && (
+        <div className="explanation-block">
+          <h3>解説</h3>
+          <p>{question.explanation}</p>
+        </div>
+      )}
+
+      {question.type === "multiple_choice" && Array.isArray(question.choices) && (
+        <div className="choice-explanations">
+          <h3>選択肢ごとの解説</h3>
+          {question.choices.map((choice) => (
+            <div key={choice.id} className="choice-explanation-item">
+              <strong>
+                {choice.id}. {choice.text}
+                {choice.isCorrect ? "（正解）" : ""}
+              </strong>
+              {choice.explanation && <p>{choice.explanation}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {renderImage(question.explanationImage, "解説画像")}
+
+      {SHOW_DEBUG_INFO && (
+        <pre className="debug-block">{JSON.stringify(result, null, 2)}</pre>
+      )}
+    </div>
+  );
+}
+
+function ResultScreen({
+  mode,
+  summary,
+  results,
+  categoryRows,
+  onBackToMenu,
+  onReviewLastMissed,
+  showLastMissedReview,
+}) {
+  return (
+    <main className="screen">
+      <div className="page-title-row">
+        <div>
+          <p className="app-kicker">{getModeTitle(mode)}</p>
+          <h2>結果</h2>
+        </div>
+        <button className="ghost-button" onClick={onBackToMenu}>
+          トップへ戻る
+        </button>
+      </div>
+
+      <section className="summary-grid">
+        <div className="summary-card">
+          <span>出題数</span>
+          <strong>{summary.questionCount}</strong>
+        </div>
+        <div className="summary-card success">
+          <span>正答数</span>
+          <strong>{summary.correct}</strong>
+        </div>
+        <div className="summary-card danger">
+          <span>誤答数</span>
+          <strong>{summary.wrong}</strong>
+        </div>
+        <div className="summary-card warning">
+          <span>無回答数</span>
+          <strong>{summary.unanswered}</strong>
+        </div>
+        <div className="summary-card">
+          <span>得点</span>
+          <strong>{formatScore(summary.score)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>満点</span>
+          <strong>{formatScore(summary.maxScore)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>所要時間</span>
+          <strong>{formatDuration(summary.durationSeconds)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>正答率</span>
+          <strong>{summary.accuracy}%</strong>
+        </div>
+      </section>
+
+      {showLastMissedReview && (
+        <section className="panel highlight-panel">
+          <h3>今回間違えた問題の復習</h3>
+          <p>直前の本番模擬で不正解または無回答だった問題だけを復習できます。</p>
+          <button className="wide-button primary" onClick={onReviewLastMissed}>
+            今回間違えた問題を復習する
+          </button>
+        </section>
+      )}
+
+      <section className="panel">
+        <h3>カテゴリ別正答率</h3>
+        {categoryRows.length === 0 ? (
+          <p className="muted-text">表示する結果がありません。</p>
         ) : (
           <div className="table-scroll">
-            <table className="history-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>カテゴリ</th>
+                  <th>出題数</th>
+                  <th>正答</th>
+                  <th>誤答</th>
+                  <th>無回答</th>
+                  <th>正答率</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categoryRows.map((row) => (
+                  <tr key={row.category}>
+                    <td>{row.category}</td>
+                    <td>{row.total}</td>
+                    <td>{row.correct}</td>
+                    <td className={row.wrong > 0 ? "danger-text" : ""}>{row.wrong}</td>
+                    <td className={row.unanswered > 0 ? "warning-text" : ""}>{row.unanswered}</td>
+                    <td>{row.accuracy}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <h3>解答一覧</h3>
+        <div className="result-list">
+          {results.map((result, index) => (
+            <div
+              key={`${result.question.id}-${index}`}
+              className={`result-item ${result.isCorrect ? "correct" : "wrong"}`}
+            >
+              <div className="result-item-head">
+                <strong>
+                  {index + 1}. {result.question.id}
+                </strong>
+                <span>{result.isUnanswered ? "無回答" : result.isCorrect ? "正解" : "不正解"}</span>
+              </div>
+              <p>{result.question.question}</p>
+              <div className="result-answer-row">
+                <span>あなたの回答：{result.userAnswerText}</span>
+                <span>正解：{getCorrectAnswerText(result.question)}</span>
+              </div>
+              {result.question.explanation && <p className="muted-text">{result.question.explanation}</p>}
+            </div>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function HistoryScreen({
+  summary,
+  mockExamAttempts,
+  rows,
+  categories,
+  filters,
+  onFilterChange,
+  onBack,
+}) {
+  return (
+    <main className="screen">
+      <div className="page-title-row">
+        <div>
+          <p className="app-kicker">確認</p>
+          <h2>学習履歴</h2>
+        </div>
+        <button className="ghost-button" onClick={onBack}>
+          トップへ戻る
+        </button>
+      </div>
+
+      <section className="summary-grid">
+        <div className="summary-card">
+          <span>総回答回数</span>
+          <strong>{summary.total}</strong>
+        </div>
+        <div className="summary-card success">
+          <span>正解数</span>
+          <strong>{summary.correct}</strong>
+        </div>
+        <div className="summary-card danger">
+          <span>不正解数</span>
+          <strong>{summary.wrong}</strong>
+        </div>
+        <div className="summary-card warning">
+          <span>無回答数</span>
+          <strong>{summary.unanswered}</strong>
+        </div>
+        <div className="summary-card">
+          <span>全体正答率</span>
+          <strong>{summary.accuracy}%</strong>
+        </div>
+        <div className="summary-card">
+          <span>誤答復習対象数</span>
+          <strong>{summary.wrongReviewCount}</strong>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h3>本番模擬の点数推移</h3>
+        {mockExamAttempts.length === 0 ? (
+          <p className="muted-text">本番模擬の記録はまだありません。</p>
+        ) : (
+          <div className="table-scroll">
+            <table>
               <thead>
                 <tr>
                   <th>実施日時</th>
@@ -1391,36 +1132,36 @@ function LearningHistoryScreen({ questions, learningHistory, onBackToMenu }) {
                 </tr>
               </thead>
               <tbody>
-                {latestMockExamAttempts.map((attempt, index) => (
-                  <tr key={attempt.id ?? `${attempt.answeredAt}-${index}`}>
-                    <td>{attempt.answeredAt ?? "-"}</td>
-                    <td>{Number(attempt.score ?? 0).toFixed(1)}</td>
-                    <td>{Number(attempt.maxScore ?? 0).toFixed(1)}</td>
-                    <td>{attempt.correct ?? 0}</td>
-                    <td>{attempt.wrong ?? 0}</td>
-                    <td>{attempt.unanswered ?? 0}</td>
-                    <td>{Number(attempt.accuracy ?? 0).toFixed(1)}%</td>
-                    <td>{formatSeconds(attempt.durationSeconds)}</td>
-                  </tr>
-                ))}
+                {mockExamAttempts
+                  .slice()
+                  .reverse()
+                  .map((attempt) => (
+                    <tr key={attempt.id}>
+                      <td>{formatDateTime(attempt.answeredAt)}</td>
+                      <td>{formatScore(attempt.score)}</td>
+                      <td>{formatScore(attempt.maxScore)}</td>
+                      <td>{attempt.correct}</td>
+                      <td className={attempt.wrong > 0 ? "danger-text" : ""}>{attempt.wrong}</td>
+                      <td className={attempt.unanswered > 0 ? "warning-text" : ""}>{attempt.unanswered}</td>
+                      <td>{attempt.accuracy}%</td>
+                      <td>{formatDuration(attempt.durationSeconds)}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
         )}
       </section>
 
-      <section className="card">
-        <h2>問題別の弱点確認</h2>
-        <p className="note">
-          正答率が低い問題は、正答率70%未満の問題として絞り込みます。
-        </p>
+      <section className="panel">
+        <h3>問題別の弱点確認</h3>
 
-        <div className="history-filter-panel">
-          <label className="history-filter-field">
+        <div className="filter-grid">
+          <label className="form-field">
             <span>カテゴリ</span>
             <select
-              value={selectedCategory}
-              onChange={(event) => setSelectedCategory(event.target.value)}
+              value={filters.category}
+              onChange={(event) => onFilterChange((prev) => ({ ...prev, category: event.target.value }))}
             >
               <option value="all">すべて</option>
               {categories.map((category) => (
@@ -1431,1411 +1172,536 @@ function LearningHistoryScreen({ questions, learningHistory, onBackToMenu }) {
             </select>
           </label>
 
-          <label className="history-check">
+          <label className="check-field">
             <input
               type="checkbox"
-              checked={lowAccuracyOnly}
-              onChange={(event) => setLowAccuracyOnly(event.target.checked)}
+              checked={filters.lowAccuracyOnly}
+              onChange={(event) => onFilterChange((prev) => ({ ...prev, lowAccuracyOnly: event.target.checked }))}
             />
             <span>正答率が低い問題</span>
           </label>
 
-          <label className="history-check">
+          <label className="check-field">
             <input
               type="checkbox"
-              checked={wrongTargetOnly}
-              onChange={(event) => setWrongTargetOnly(event.target.checked)}
+              checked={filters.wrongOnly}
+              onChange={(event) => onFilterChange((prev) => ({ ...prev, wrongOnly: event.target.checked }))}
             />
             <span>誤答復習対象</span>
           </label>
 
-          <label className="history-check">
+          <label className="check-field">
             <input
               type="checkbox"
-              checked={hasUnansweredOnly}
-              onChange={(event) => setHasUnansweredOnly(event.target.checked)}
+              checked={filters.includeUnansweredOnly}
+              onChange={(event) =>
+                onFilterChange((prev) => ({ ...prev, includeUnansweredOnly: event.target.checked }))
+              }
             />
             <span>未回答を含む問題</span>
           </label>
         </div>
 
-        <p className="note">表示件数：{filteredRows.length}件</p>
-
-        {filteredRows.length === 0 ? (
-          <p>条件に一致する履歴はありません。</p>
-        ) : (
-          <div className="table-scroll">
-            <table className="history-table">
-              <thead>
-                <tr>
-                  <th>問題ID</th>
-                  <th>カテゴリ</th>
-                  <th>問題文</th>
-                  <th>回答</th>
-                  <th>正解</th>
-                  <th>不正解</th>
-                  <th>無回答</th>
-                  <th>正答率</th>
-                  <th>最後の結果</th>
-                  <th>最終回答日時</th>
-                  <th>復習対象</th>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>問題ID</th>
+                <th>カテゴリ</th>
+                <th>問題文</th>
+                <th>回答回数</th>
+                <th>正解</th>
+                <th>不正解</th>
+                <th>無回答</th>
+                <th>正答率</th>
+                <th>最後の結果</th>
+                <th>最終回答日時</th>
+                <th>復習対象</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.question.id}>
+                  <td>{row.question.id}</td>
+                  <td>{normalizeText(row.question.category) || "未設定"}</td>
+                  <td className="wide-cell">{row.question.question}</td>
+                  <td>{row.attempts}</td>
+                  <td>{row.correct}</td>
+                  <td className={row.wrong > 0 ? "danger-text" : ""}>{row.wrong}</td>
+                  <td className={row.unanswered > 0 ? "warning-text" : ""}>{row.unanswered}</td>
+                  <td>{row.accuracy === null ? "-" : `${row.accuracy}%`}</td>
+                  <td>{formatResultLabel(row.lastResult)}</td>
+                  <td>{formatDateTime(row.lastAnsweredAt)}</td>
+                  <td>{row.isWrongReviewTarget ? "対象" : "-"}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((row) => (
-                  <tr
-                    key={row.questionId}
-                    className={
-                      row.isWrongTarget
-                        ? "history-row-target"
-                        : row.accuracy < 70
-                        ? "history-row-low"
-                        : ""
-                    }
-                  >
-                    <td>{row.questionId}</td>
-                    <td>{row.category}</td>
-                    <td className="history-question-preview">{row.preview}</td>
-                    <td>{row.attempts}</td>
-                    <td>{row.correct}</td>
-                    <td>{row.wrong}</td>
-                    <td>{row.unanswered}</td>
-                    <td>{row.accuracy.toFixed(1)}%</td>
-                    <td>{formatLastResult(row.lastResult)}</td>
-                    <td>{row.lastAnsweredAt}</td>
-                    <td>
-                      {row.isWrongTarget ? (
-                        <span className="history-badge danger">対象</span>
-                      ) : (
-                        <span className="history-badge muted">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
-
-      <div className="action-row">
-        <button
-          type="button"
-          className="button secondary"
-          onClick={onBackToMenu}
-        >
-          トップへ戻る
-        </button>
-      </div>
     </main>
   );
 }
 
-function QuestionListScreen({ questions, onBackToMenu }) {
-  const [keyword, setKeyword] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedType, setSelectedType] = useState("all");
-  const [hasQuestionImageOnly, setHasQuestionImageOnly] = useState(false);
-  const [hasExplanationImageOnly, setHasExplanationImageOnly] = useState(false);
-  const [emptyCategoryOnly, setEmptyCategoryOnly] = useState(false);
-  const [selectedQuestionId, setSelectedQuestionId] = useState(
-    questions[0]?.id ?? null
-  );
-
-  const categories = buildCategoryOptions(questions);
-  const normalizedKeyword = keyword.trim().toLowerCase();
-
-  const filteredQuestions = questions.filter((question) => {
-    const category = getCategoryName(question);
-    const searchableText = [
-      question.id,
-      question.type,
-      question.category,
-      question.subCategory,
-      question.question,
-      question.explanation,
-      ...(question.tags ?? []),
-      ...(question.choices ?? []).map((choice) => choice.text),
-      ...(question.choices ?? []).map((choice) => choice.explanation),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    if (normalizedKeyword && !searchableText.includes(normalizedKeyword)) {
-      return false;
-    }
-
-    if (selectedCategory !== "all" && category !== selectedCategory) {
-      return false;
-    }
-
-    if (selectedType !== "all" && question.type !== selectedType) {
-      return false;
-    }
-
-    if (hasQuestionImageOnly && !question.image) {
-      return false;
-    }
-
-    if (hasExplanationImageOnly && !question.explanationImage) {
-      return false;
-    }
-
-    if (emptyCategoryOnly && question.category) {
-      return false;
-    }
-
-    return true;
-  });
-
-  const selectedQuestion =
-    filteredQuestions.find((question) => question.id === selectedQuestionId) ??
-    filteredQuestions[0] ??
-    null;
-
-  useEffect(() => {
-    if (!filteredQuestions.length) {
-      setSelectedQuestionId(null);
-      return;
-    }
-
-    const exists = filteredQuestions.some(
-      (question) => question.id === selectedQuestionId
-    );
-
-    if (!exists) {
-      setSelectedQuestionId(filteredQuestions[0].id);
-    }
-  }, [filteredQuestions, selectedQuestionId]);
-
+function QuestionListScreen({
+  questions,
+  categories,
+  filters,
+  expandedQuestionIds,
+  onFilterChange,
+  onToggleDetail,
+  onBack,
+}) {
   return (
-    <main className="container question-list-container">
-      <h1>問題一覧</h1>
+    <main className="screen">
+      <div className="page-title-row">
+        <div>
+          <p className="app-kicker">確認</p>
+          <h2>問題一覧</h2>
+        </div>
+        <button className="ghost-button" onClick={onBack}>
+          トップへ戻る
+        </button>
+      </div>
 
-      <section className="card">
-        <h2>検索・絞り込み</h2>
-        <p className="note">
-          問題データを確認するための画面です。受験者も使用できるため、演習とは分けて確認してください。
-        </p>
-
-        <div className="question-list-filter-panel">
-          <label className="question-list-filter-field wide">
+      <section className="panel">
+        <div className="filter-grid">
+          <label className="form-field">
             <span>キーワード</span>
             <input
               type="text"
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder="問題文、問題ID、解説、選択肢など"
+              value={filters.keyword}
+              onChange={(event) => onFilterChange((prev) => ({ ...prev, keyword: event.target.value }))}
+              placeholder="問題文・解説・IDで検索"
             />
           </label>
 
-          <label className="question-list-filter-field">
+          <label className="form-field">
             <span>カテゴリ</span>
             <select
-              value={selectedCategory}
-              onChange={(event) => setSelectedCategory(event.target.value)}
+              value={filters.category}
+              onChange={(event) => onFilterChange((prev) => ({ ...prev, category: event.target.value }))}
             >
               <option value="all">すべて</option>
-              {categories.map((item) => (
-                <option key={item.category} value={item.category}>
-                  {item.category}（{item.count}問）
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
                 </option>
               ))}
             </select>
           </label>
 
-          <label className="question-list-filter-field">
+          <label className="form-field">
             <span>形式</span>
             <select
-              value={selectedType}
-              onChange={(event) => setSelectedType(event.target.value)}
+              value={filters.type}
+              onChange={(event) => onFilterChange((prev) => ({ ...prev, type: event.target.value }))}
             >
               <option value="all">すべて</option>
               <option value="true_false">○×</option>
               <option value="multiple_choice">択一</option>
             </select>
           </label>
-        </div>
 
-        <div className="question-list-checks">
-          <label className="history-check">
+          <label className="check-field">
             <input
               type="checkbox"
-              checked={hasQuestionImageOnly}
-              onChange={(event) =>
-                setHasQuestionImageOnly(event.target.checked)
-              }
+              checked={filters.hasImage}
+              onChange={(event) => onFilterChange((prev) => ({ ...prev, hasImage: event.target.checked }))}
             />
             <span>問題画像あり</span>
           </label>
 
-          <label className="history-check">
+          <label className="check-field">
             <input
               type="checkbox"
-              checked={hasExplanationImageOnly}
-              onChange={(event) =>
-                setHasExplanationImageOnly(event.target.checked)
-              }
+              checked={filters.hasExplanationImage}
+              onChange={(event) => onFilterChange((prev) => ({ ...prev, hasExplanationImage: event.target.checked }))}
             />
             <span>解説画像あり</span>
           </label>
 
-          <label className="history-check">
+          <label className="check-field">
             <input
               type="checkbox"
-              checked={emptyCategoryOnly}
-              onChange={(event) => setEmptyCategoryOnly(event.target.checked)}
+              checked={filters.noCategory}
+              onChange={(event) => onFilterChange((prev) => ({ ...prev, noCategory: event.target.checked }))}
             />
             <span>カテゴリ未設定</span>
           </label>
         </div>
-
-        <p className="note">
-          表示件数：{filteredQuestions.length} / {questions.length} 問
-        </p>
       </section>
 
-      <section className="question-list-layout">
-        <div className="card question-list-panel">
-          <h2>一覧</h2>
+      <section className="question-list">
+        <div className="list-count">表示件数：{questions.length} 件</div>
 
-          {filteredQuestions.length === 0 ? (
-            <p>条件に一致する問題はありません。</p>
-          ) : (
-            <div className="question-list-items">
-              {filteredQuestions.map((question) => {
-                const questionText =
-                  question.question.length > 80
-                    ? `${question.question.slice(0, 80)}...`
-                    : question.question;
+        {questions.map((question) => {
+          const expanded = expandedQuestionIds.has(question.id);
 
-                return (
-                  <button
-                    key={question.id}
-                    type="button"
-                    className={
-                      selectedQuestion?.id === question.id
-                        ? "question-list-item selected"
-                        : "question-list-item"
-                    }
-                    onClick={() => setSelectedQuestionId(question.id)}
-                  >
-                    <span className="question-list-item-header">
-                      <strong>{question.id}</strong>
-                      <span>
-                        {question.type === "true_false" ? "○×" : "択一"}
-                      </span>
-                    </span>
-                    <span className="question-list-item-category">
-                      {getCategoryName(question)}
-                    </span>
-                    <span className="question-list-item-text">
-                      {questionText}
-                    </span>
-                    <span className="question-list-item-badges">
-                      {question.image && (
-                        <span className="question-data-badge">問題画像</span>
-                      )}
-                      {question.explanationImage && (
-                        <span className="question-data-badge">解説画像</span>
-                      )}
-                      {!question.category && (
-                        <span className="question-data-badge warning">
-                          カテゴリ未設定
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+          return (
+            <article key={question.id} className="question-list-card">
+              <div className="question-list-head">
+                <div>
+                  <strong>{question.id}</strong>
+                  <div className="question-list-meta">
+                    <span>{question.type === "true_false" ? "○×" : "択一"}</span>
+                    <span>{normalizeText(question.category) || "カテゴリ未設定"}</span>
+                    <span>問題画像：{question.image ? "あり" : "なし"}</span>
+                    <span>解説画像：{question.explanationImage ? "あり" : "なし"}</span>
+                  </div>
+                </div>
+                <button className="ghost-button small" onClick={() => onToggleDetail(question.id)}>
+                  {expanded ? "閉じる" : "詳細表示"}
+                </button>
+              </div>
 
-        <div className="card question-detail-panel">
-          <h2>詳細</h2>
+              <p className="question-list-text">{question.question}</p>
 
-          {!selectedQuestion ? (
-            <p>確認する問題を選択してください。</p>
-          ) : (
-            <QuestionDetail question={selectedQuestion} />
-          )}
-        </div>
+              {expanded && (
+                <div className="question-detail">
+                  <DetailRow label="問題ID" value={question.id} />
+                  <DetailRow label="形式" value={question.type === "true_false" ? "○×" : "択一"} />
+                  <DetailRow label="カテゴリ" value={normalizeText(question.category) || "未設定"} />
+                  <DetailRow label="サブカテゴリ" value={normalizeText(question.subCategory) || "-"} />
+                  <DetailRow label="タグ" value={(question.tags ?? []).join(", ") || "-"} />
+
+                  <div className="detail-block">
+                    <h4>問題文</h4>
+                    <p>{question.question}</p>
+                    {renderImage(question.image, "問題画像")}
+                  </div>
+
+                  <DetailRow label="正解" value={getCorrectAnswerText(question)} />
+
+                  {question.type === "multiple_choice" && Array.isArray(question.choices) && (
+                    <div className="detail-block">
+                      <h4>選択肢</h4>
+                      {question.choices.map((choice) => (
+                        <div key={choice.id} className="choice-explanation-item">
+                          <strong>
+                            {choice.id}. {choice.text}
+                            {choice.isCorrect ? "（正解）" : ""}
+                          </strong>
+                          {choice.explanation && <p>{choice.explanation}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {question.explanation && (
+                    <div className="detail-block">
+                      <h4>総合解説</h4>
+                      <p>{question.explanation}</p>
+                    </div>
+                  )}
+
+                  {renderImage(question.explanationImage, "解説画像")}
+                </div>
+              )}
+            </article>
+          );
+        })}
       </section>
-
-      <div className="action-row">
-        <button
-          type="button"
-          className="button secondary"
-          onClick={onBackToMenu}
-        >
-          トップへ戻る
-        </button>
-      </div>
     </main>
   );
 }
 
-function QuestionDetail({ question }) {
-  const correctChoice =
-    question.type === "multiple_choice"
-      ? question.choices.find((choice) => choice.isCorrect)
-      : null;
-
+function DetailRow({ label, value }) {
   return (
-    <div className="question-detail">
-      <div className="question-detail-meta">
-        <span>問題ID：{question.id}</span>
-        <span>形式：{question.type === "true_false" ? "○×" : "択一"}</span>
-        <span>カテゴリ：{question.category ?? "未設定"}</span>
-        <span>サブカテゴリ：{question.subCategory ?? "未設定"}</span>
-      </div>
-
-      {question.tags?.length > 0 && (
-        <p className="question-detail-tags">タグ：{question.tags.join("、")}</p>
-      )}
-
-      <section className="question-detail-section">
-        <h3>問題文</h3>
-        <p className="question-detail-text">{question.question}</p>
-      </section>
-
-      <QuestionImage src={question.image} label={`${question.id}の問題画像`} />
-
-      <section className="question-detail-section">
-        <h3>正解</h3>
-        {question.type === "true_false" ? (
-          <p className="question-detail-answer">
-            {formatTrueFalse(question.answer)}
-          </p>
-        ) : (
-          <p className="question-detail-answer">
-            {correctChoice?.id}. {correctChoice?.text}
-          </p>
-        )}
-      </section>
-
-      {question.type === "multiple_choice" && (
-        <section className="question-detail-section">
-          <h3>選択肢</h3>
-          <div className="question-detail-choices">
-            {question.choices.map((choice) => (
-              <div
-                key={choice.id}
-                className={
-                  choice.isCorrect
-                    ? "question-detail-choice correct-choice-detail"
-                    : "question-detail-choice"
-                }
-              >
-                <p>
-                  <strong>{choice.id}. </strong>
-                  {choice.text}
-                </p>
-                <p className="note">
-                  {choice.explanation || "選択肢ごとの解説なし"}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="question-detail-section">
-        <h3>{question.type === "multiple_choice" ? "総合解説" : "解説"}</h3>
-        <p>{question.explanation || "解説なし"}</p>
-      </section>
-
-      <QuestionImage
-        src={question.explanationImage}
-        label={`${question.id}の解説画像`}
-      />
-
-      {SHOW_DEBUG_INFO && (
-        <div className="debug-box">
-          <p>source：{question.source ?? "-"}</p>
-          <p>difficulty：{question.difficulty ?? "-"}</p>
-          <p>version：{question.version ?? "-"}</p>
-          <p>lastUpdated：{question.lastUpdated ?? "-"}</p>
-          <p>
-            shuffleChoices：
-            {question.shuffleChoices === true
-              ? "true"
-              : question.shuffleChoices === false
-              ? "false"
-              : "-"}
-          </p>
-        </div>
-      )}
+    <div className="detail-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
 
-function PracticeSetupScreen({
-  title,
-  questions,
-  selectedCategories,
-  questionCount,
-  onChangeSelectedCategories,
-  onChangeQuestionCount,
-  onStart,
-  onBackToMenu,
-}) {
-  const categories = buildCategoryOptions(questions);
-  const selectedCategorySet = new Set(selectedCategories);
+function buildAnswerResult(question, answer) {
+  const isUnanswered = answer === null || answer === undefined || answer === "";
+  const isCorrect = !isUnanswered && isAnswerCorrect(question, answer);
+  const scoreUnit = question.type === "true_false" ? TRUE_FALSE_SCORE : MULTIPLE_CHOICE_SCORE;
+  const scoreDelta = isUnanswered ? 0 : isCorrect ? scoreUnit : -scoreUnit;
 
-  const targetQuestions =
-    selectedCategories.length === 0
-      ? questions
-      : questions.filter((question) =>
-          selectedCategorySet.has(getCategoryName(question))
-        );
-
-  const requestedCount = Number(questionCount);
-  const actualCount =
-    !requestedCount || requestedCount <= 0
-      ? targetQuestions.length
-      : Math.min(requestedCount, targetQuestions.length);
-
-  const toggleCategory = (category) => {
-    if (selectedCategorySet.has(category)) {
-      onChangeSelectedCategories(
-        selectedCategories.filter((item) => item !== category)
-      );
-    } else {
-      onChangeSelectedCategories([...selectedCategories, category]);
-    }
+  return {
+    question,
+    userAnswer: answer,
+    userAnswerText: getUserAnswerText(question, answer),
+    isCorrect,
+    isUnanswered,
+    scoreDelta,
+    answeredAt: new Date().toISOString(),
   };
-
-  const selectAllCategories = () => {
-    onChangeSelectedCategories(categories.map((item) => item.category));
-  };
-
-  const clearCategories = () => {
-    onChangeSelectedCategories([]);
-  };
-
-  return (
-    <main className="container">
-      <h1>{title}</h1>
-
-      <section className="card">
-        <h2>出題カテゴリ</h2>
-        <p className="note">
-          複数選択できます。何も選択しない場合は、全カテゴリから出題します。
-        </p>
-
-        <div className="setup-actions">
-          <button
-            type="button"
-            className="button secondary"
-            onClick={selectAllCategories}
-          >
-            すべて選択
-          </button>
-          <button
-            type="button"
-            className="button secondary"
-            onClick={clearCategories}
-          >
-            選択解除
-          </button>
-        </div>
-
-        <div className="category-grid">
-          {categories.map((item) => (
-            <label key={item.category} className="category-option">
-              <input
-                type="checkbox"
-                checked={selectedCategorySet.has(item.category)}
-                onChange={() => toggleCategory(item.category)}
-              />
-              <span>{item.category}</span>
-              <span className="category-count">{item.count}問</span>
-            </label>
-          ))}
-        </div>
-      </section>
-
-      <section className="card">
-        <h2>出題数</h2>
-        <p className="note">
-          空欄または0以下の場合は、対象問題を全問出題します。指定数が対象問題数を超える場合も、対象問題を全問出題します。
-        </p>
-
-        <input
-          type="number"
-          min="0"
-          className="question-count-input"
-          value={questionCount}
-          onChange={(event) => onChangeQuestionCount(event.target.value)}
-          placeholder="例：10"
-        />
-
-        <div className="setup-summary">
-          <p>条件に一致する問題数：{targetQuestions.length}問</p>
-          <p>実際の出題予定数：{actualCount}問</p>
-        </div>
-      </section>
-
-      <div className="action-row">
-        <button
-          type="button"
-          className="button primary"
-          onClick={onStart}
-          disabled={targetQuestions.length === 0}
-        >
-          演習開始
-        </button>
-
-        <button
-          type="button"
-          className="button secondary"
-          onClick={onBackToMenu}
-        >
-          トップへ戻る
-        </button>
-      </div>
-    </main>
-  );
 }
 
-function TrueFalsePracticeScreen({
-  currentIndex,
-  questions,
-  currentQuestion,
-  selectedAnswer,
-  isAnswered,
-  onAnswer,
-  onNext,
-  onBackToMenu,
-}) {
-  return (
-    <main className="container">
-      <h1>○×演習</h1>
-
-      <section className="card">
-        <p className="progress">
-          {currentIndex + 1} / {questions.length} 問
-        </p>
-
-        <QuestionMeta question={currentQuestion} />
-
-        <h2 className="question-text">{currentQuestion.question}</h2>
-
-        <QuestionImage
-          src={currentQuestion.image}
-          label={`${currentQuestion.id}の問題画像`}
-        />
-
-        <div className="answer-buttons">
-          <button
-            type="button"
-            className="answer-button"
-            onClick={() => onAnswer(true)}
-            disabled={isAnswered}
-          >
-            ○
-          </button>
-          <button
-            type="button"
-            className="answer-button"
-            onClick={() => onAnswer(false)}
-            disabled={isAnswered}
-          >
-            ×
-          </button>
-        </div>
-
-        {isAnswered && (
-          <div
-            className={
-              selectedAnswer === currentQuestion.answer
-                ? "result correct"
-                : "result wrong"
-            }
-          >
-            <p className="result-question-id">問題ID：{currentQuestion.id}</p>
-            <p>
-              {selectedAnswer === currentQuestion.answer ? "正解" : "不正解"}
-            </p>
-            <p>正解：{formatTrueFalse(currentQuestion.answer)}</p>
-
-            {currentQuestion.explanation && (
-              <p>解説：{currentQuestion.explanation}</p>
-            )}
-
-            <QuestionImage
-              src={currentQuestion.explanationImage}
-              label={`${currentQuestion.id}の解説画像`}
-            />
-
-            <button type="button" className="button" onClick={onNext}>
-              {currentIndex + 1 === questions.length ? "結果を見る" : "次の問題"}
-            </button>
-          </div>
-        )}
-
-        <button type="button" className="text-button" onClick={onBackToMenu}>
-          トップへ戻る
-        </button>
-      </section>
-    </main>
-  );
-}
-
-function MultipleChoicePracticeScreen({
-  currentIndex,
-  questions,
-  currentQuestion,
-  displayChoices,
-  selectedChoiceId,
-  isAnswered,
-  onAnswer,
-  onNext,
-  onBackToMenu,
-}) {
-  const selectedChoice = displayChoices.find(
-    (choice) => choice.id === selectedChoiceId
-  );
-
-  return (
-    <main className="container">
-      <h1>択一演習</h1>
-
-      <section className="card">
-        <p className="progress">
-          {currentIndex + 1} / {questions.length} 問
-        </p>
-
-        <QuestionMeta question={currentQuestion} />
-
-        <h2 className="question-text">{currentQuestion.question}</h2>
-
-        <QuestionImage
-          src={currentQuestion.image}
-          label={`${currentQuestion.id}の問題画像`}
-        />
-
-        {SHOW_DEBUG_INFO && (
-          <div className="debug-box">
-            選択肢シャッフル：
-            {currentQuestion.shuffleChoices ? "有効" : "無効"}
-          </div>
-        )}
-
-        <ChoiceButtons
-          displayChoices={displayChoices}
-          selectedChoiceId={selectedChoiceId}
-          isAnswered={isAnswered}
-          onAnswer={onAnswer}
-        />
-
-        {isAnswered && (
-          <div
-            className={
-              selectedChoice?.isCorrect ? "result correct" : "result wrong"
-            }
-          >
-            <p className="result-question-id">問題ID：{currentQuestion.id}</p>
-            <p>{selectedChoice?.isCorrect ? "正解" : "不正解"}</p>
-
-            {currentQuestion.explanation && (
-              <p>総合解説：{currentQuestion.explanation}</p>
-            )}
-
-            <QuestionImage
-              src={currentQuestion.explanationImage}
-              label={`${currentQuestion.id}の解説画像`}
-            />
-
-            <ChoiceExplanations choices={currentQuestion.choices} />
-
-            <button type="button" className="button" onClick={onNext}>
-              {currentIndex + 1 === questions.length ? "結果を見る" : "次の問題"}
-            </button>
-          </div>
-        )}
-
-        <button type="button" className="text-button" onClick={onBackToMenu}>
-          トップへ戻る
-        </button>
-      </section>
-    </main>
-  );
-}
-
-function ReviewPracticeScreen({
-  title,
-  note,
-  currentIndex,
-  questions,
-  currentQuestion,
-  displayChoices,
-  selectedAnswer,
-  selectedChoiceId,
-  isAnswered,
-  onSelectTrueFalse,
-  onSelectChoice,
-  onSetIsAnswered,
-  onSaveResult,
-  onNext,
-  onBackToMenu,
-}) {
-  const selectedChoice = displayChoices.find(
-    (choice) => choice.id === selectedChoiceId
-  );
-
-  const saveTrueFalseAnswer = (answer) => {
-    if (isAnswered) return;
-
-    const result = buildTrueFalseResult(currentQuestion, answer);
-
-    onSelectTrueFalse(answer);
-    onSetIsAnswered(true);
-    onSaveResult(result);
-  };
-
-  const saveChoiceAnswer = (choice) => {
-    if (isAnswered) return;
-
-    const result = buildMultipleChoiceResult(currentQuestion, choice.id);
-
-    onSelectChoice(choice.id);
-    onSetIsAnswered(true);
-    onSaveResult(result);
-  };
-
-  return (
-    <main className="container">
-      <h1>{title}</h1>
-
-      <section className="card">
-        <p className="progress">
-          {currentIndex + 1} / {questions.length} 問
-        </p>
-
-        <p className="note">{note}</p>
-
-        <QuestionMeta question={currentQuestion} />
-
-        <h2 className="question-text">{currentQuestion.question}</h2>
-
-        <QuestionImage
-          src={currentQuestion.image}
-          label={`${currentQuestion.id}の問題画像`}
-        />
-
-        {currentQuestion.type === "true_false" && (
-          <div className="answer-buttons">
-            <button
-              type="button"
-              className="answer-button"
-              onClick={() => saveTrueFalseAnswer(true)}
-              disabled={isAnswered}
-            >
-              ○
-            </button>
-            <button
-              type="button"
-              className="answer-button"
-              onClick={() => saveTrueFalseAnswer(false)}
-              disabled={isAnswered}
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {currentQuestion.type === "multiple_choice" && (
-          <>
-            {SHOW_DEBUG_INFO && (
-              <div className="debug-box">
-                選択肢シャッフル：
-                {currentQuestion.shuffleChoices ? "有効" : "無効"}
-              </div>
-            )}
-
-            <ChoiceButtons
-              displayChoices={displayChoices}
-              selectedChoiceId={selectedChoiceId}
-              isAnswered={isAnswered}
-              onAnswer={saveChoiceAnswer}
-            />
-          </>
-        )}
-
-        {isAnswered && (
-          <div
-            className={
-              currentQuestion.type === "true_false"
-                ? selectedAnswer === currentQuestion.answer
-                  ? "result correct"
-                  : "result wrong"
-                : selectedChoice?.isCorrect
-                ? "result correct"
-                : "result wrong"
-            }
-          >
-            <p className="result-question-id">問題ID：{currentQuestion.id}</p>
-            <p>
-              {currentQuestion.type === "true_false"
-                ? selectedAnswer === currentQuestion.answer
-                  ? "正解"
-                  : "不正解"
-                : selectedChoice?.isCorrect
-                ? "正解"
-                : "不正解"}
-            </p>
-
-            {currentQuestion.type === "true_false" && (
-              <p>正解：{formatTrueFalse(currentQuestion.answer)}</p>
-            )}
-
-            {currentQuestion.explanation && (
-              <p>
-                {currentQuestion.type === "multiple_choice"
-                  ? "総合解説"
-                  : "解説"}
-                ：{currentQuestion.explanation}
-              </p>
-            )}
-
-            <QuestionImage
-              src={currentQuestion.explanationImage}
-              label={`${currentQuestion.id}の解説画像`}
-            />
-
-            {currentQuestion.type === "multiple_choice" && (
-              <ChoiceExplanations choices={currentQuestion.choices} />
-            )}
-
-            <button type="button" className="button" onClick={onNext}>
-              {currentIndex + 1 === questions.length ? "結果を見る" : "次の問題"}
-            </button>
-          </div>
-        )}
-
-        <button type="button" className="text-button" onClick={onBackToMenu}>
-          トップへ戻る
-        </button>
-      </section>
-    </main>
-  );
-}
-
-function MockExamScreen({
-  currentIndex,
-  questions,
-  currentQuestion,
-  displayChoices,
-  isFullMockExam,
-  onSelectTrueFalse,
-  onSelectChoice,
-  onUnansweredNext,
-  onBackToMenu,
-}) {
-  const typeCounts = countQuestionsByType(questions);
-
-  return (
-    <main className="container">
-      <h1>本番模擬</h1>
-
-      <section className="card">
-        <div className="mock-header">
-          <p className="progress">
-            {currentIndex + 1} / {questions.length} 問
-          </p>
-          <p className="note">回答を選択すると、自動で次の問題へ進みます。</p>
-        </div>
-
-        {SHOW_DEBUG_INFO && (
-          <div className="debug-box">
-            <p>
-              出題構成：
-              {isFullMockExam
-                ? "70問構成（○×60問・択一10問、カテゴリ比率考慮）"
-                : "問題数不足のため、対象問題を全問出題"}
-            </p>
-            <p>
-              ○×：{typeCounts.trueFalse}問 ／ 択一：
-              {typeCounts.multipleChoice}問
-            </p>
-          </div>
-        )}
-
-        <QuestionMeta question={currentQuestion} showCategory={false} />
-
-        <h2 className="question-text">{currentQuestion.question}</h2>
-
-        <QuestionImage
-          src={currentQuestion.image}
-          label={`${currentQuestion.id}の問題画像`}
-        />
-
-        {currentQuestion.type === "true_false" && (
-          <div className="answer-buttons">
-            <button
-              type="button"
-              className="answer-button"
-              onClick={() => onSelectTrueFalse(true)}
-            >
-              ○
-            </button>
-            <button
-              type="button"
-              className="answer-button"
-              onClick={() => onSelectTrueFalse(false)}
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {currentQuestion.type === "multiple_choice" && (
-          <>
-            {SHOW_DEBUG_INFO && (
-              <div className="debug-box">
-                選択肢シャッフル：
-                {currentQuestion.shuffleChoices ? "有効" : "無効"}
-              </div>
-            )}
-
-            <ChoiceButtons
-              displayChoices={displayChoices}
-              selectedChoiceId={null}
-              isAnswered={false}
-              onAnswer={onSelectChoice}
-            />
-          </>
-        )}
-
-        <div className="action-row">
-          <button
-            type="button"
-            className="button secondary"
-            onClick={onUnansweredNext}
-          >
-            無回答で次へ
-          </button>
-        </div>
-
-        <button type="button" className="text-button" onClick={onBackToMenu}>
-          トップへ戻る
-        </button>
-      </section>
-    </main>
-  );
-}
-
-function ChoiceButtons({
-  displayChoices,
-  selectedChoiceId,
-  isAnswered,
-  onAnswer,
-}) {
-  return (
-    <div className="choice-buttons">
-      {displayChoices.map((choice, index) => {
-        const displayLabel = String.fromCharCode(65 + index);
-        const isSelected = selectedChoiceId === choice.id;
-        const isCorrectChoice = choice.isCorrect;
-
-        let className = "choice-button";
-
-        if (isAnswered && isSelected && isCorrectChoice) {
-          className += " selected-correct";
-        } else if (isAnswered && isSelected && !isCorrectChoice) {
-          className += " selected-wrong";
-        } else if (isAnswered && isCorrectChoice) {
-          className += " correct-choice";
-        } else if (!isAnswered && isSelected) {
-          className += " mock-selected-choice";
-        }
-
-        return (
-          <button
-            key={choice.id}
-            type="button"
-            className={className}
-            onClick={() => onAnswer(choice)}
-            disabled={isAnswered}
-          >
-            <span className="display-label">{displayLabel}</span>
-            <span>{choice.text}</span>
-            {SHOW_DEBUG_INFO && (
-              <span className="original-id">元ID：{choice.id}</span>
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function ResultScreen({
-  mode,
-  questions,
-  results,
-  startedAt,
-  finishedAt,
-  onRestart,
-  onBackToMenu,
-  onStartMockExamReview,
-}) {
-  const correctCount = results.filter((result) => result.isCorrect).length;
-  const wrongCount = results.filter(
-    (result) => !result.isCorrect && !result.isUnanswered
-  ).length;
-  const unansweredCount = results.filter((result) => result.isUnanswered).length;
-  const totalScore = results.reduce((sum, result) => sum + result.score, 0);
-  const maxScore = questions.reduce(
-    (sum, question) => sum + getQuestionMaxScore(question),
-    0
-  );
-  const durationText = formatDuration(startedAt, finishedAt);
-  const categoryStats = buildCategoryStats(questions, results);
-  const mockExamReviewQuestions = buildMockExamReviewQuestions(
-    questions,
-    results
-  );
-
-  return (
-    <main className="container">
-      <h1>{getModeTitle(mode)} 結果</h1>
-
-      <section className="card">
-        <p>出題数：{questions.length}問</p>
-        <p>正答数：{correctCount}問</p>
-        <p>誤答数：{wrongCount}問</p>
-        <p>無回答数：{unansweredCount}問</p>
-        <p>
-          得点：{totalScore.toFixed(1)} / {maxScore.toFixed(1)} 点
-        </p>
-        {durationText && <p>所要時間：{durationText}</p>}
-
-        {mode === "wrong_review" && (
-          <p className="note">
-            2回連続正解した問題は、誤答復習対象から外れます。トップ画面の誤答復習対象数で確認できます。
-          </p>
-        )}
-
-        {mode === "mock_exam_review" && (
-          <p className="note">この復習結果も学習履歴に保存されます。</p>
-        )}
-
-        {mode === "mock_exam" && mockExamReviewQuestions.length > 0 && (
-          <button
-            type="button"
-            className="button primary"
-            onClick={() => onStartMockExamReview(mockExamReviewQuestions)}
-          >
-            今回間違えた問題を復習する
-          </button>
-        )}
-
-        {mode === "mock_exam" && mockExamReviewQuestions.length === 0 && (
-          <p className="note">今回の本番模擬で復習対象の問題はありません。</p>
-        )}
-      </section>
-
-      <section className="card">
-        <h2>カテゴリ別正答率</h2>
-        {categoryStats.length === 0 ? (
-          <p>カテゴリ情報がありません。</p>
-        ) : (
-          <table className="stats-table">
-            <thead>
-              <tr>
-                <th>カテゴリ</th>
-                <th>正答</th>
-                <th>誤答</th>
-                <th>無回答</th>
-                <th>正答率</th>
-              </tr>
-            </thead>
-            <tbody>
-              {categoryStats.map((stat) => (
-                <tr key={stat.category}>
-                  <td>{stat.category}</td>
-                  <td>{stat.correct}</td>
-                  <td>{stat.wrong}</td>
-                  <td>{stat.unanswered}</td>
-                  <td>{stat.accuracy.toFixed(1)}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <section className="card">
-        <h2>解答一覧</h2>
-        <ol>
-          {results.map((result, index) => {
-            const question = questions[index];
-            const reviewClassName = result.isCorrect
-              ? "review-item"
-              : result.isUnanswered
-              ? "review-item review-item-unanswered"
-              : "review-item review-item-wrong";
-
-            return (
-              <li
-                key={`${result.questionId}-${index}`}
-                className={reviewClassName}
-              >
-                <ReviewResult question={question} result={result} />
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-
-      <div className="action-row">
-        <button type="button" className="button" onClick={onRestart}>
-          もう一度実施する
-        </button>
-        <button
-          type="button"
-          className="button secondary"
-          onClick={onBackToMenu}
-        >
-          トップへ戻る
-        </button>
-      </div>
-    </main>
-  );
-}
-
-function ReviewResult({ question, result }) {
-  const statusText = result.isUnanswered
-    ? "無回答"
-    : result.isCorrect
-    ? "正解"
-    : "不正解";
-
+function isAnswerCorrect(question, answer) {
   if (question.type === "true_false") {
-    return (
-      <>
-        <p>
-          <strong>{question.id}</strong>：
-          <span
-            className={
-              result.isCorrect
-                ? "review-status review-status-correct"
-                : result.isUnanswered
-                ? "review-status review-status-unanswered"
-                : "review-status review-status-wrong"
-            }
-          >
-            {statusText}
-          </span>
-        </p>
-        <p>問題文：{question.question}</p>
-
-        <QuestionImage
-          src={question.image}
-          label={`${question.id}の問題画像`}
-        />
-
-        <p>
-          あなたの回答：{formatTrueFalse(result.selectedAnswer)} ／ 正解：
-          {formatTrueFalse(result.correctAnswer)}
-        </p>
-
-        {question.explanation && <p>解説：{question.explanation}</p>}
-
-        <QuestionImage
-          src={question.explanationImage}
-          label={`${question.id}の解説画像`}
-        />
-      </>
-    );
+    return Boolean(question.answer) === Boolean(answer);
   }
 
-  const selectedChoice = question.choices.find(
-    (choice) => choice.id === result.selectedChoiceId
-  );
-  const correctChoice = question.choices.find((choice) => choice.isCorrect);
+  if (question.type === "multiple_choice") {
+    const selected = (question.choices ?? []).find((choice) => choice.id === answer);
+    return Boolean(selected?.isCorrect);
+  }
 
-  return (
-    <>
-      <p>
-        <strong>{question.id}</strong>：
-        <span
-          className={
-            result.isCorrect
-              ? "review-status review-status-correct"
-              : result.isUnanswered
-              ? "review-status review-status-unanswered"
-              : "review-status review-status-wrong"
-          }
-        >
-          {statusText}
-        </span>
-      </p>
-      <p>問題文：{question.question}</p>
-
-      <QuestionImage
-        src={question.image}
-        label={`${question.id}の問題画像`}
-      />
-
-      <p>
-        あなたの回答：
-        {selectedChoice
-          ? `${result.selectedChoiceId}. ${selectedChoice.text}`
-          : "未回答"}
-      </p>
-      <p>
-        正解：{correctChoice?.id}. {correctChoice?.text}
-      </p>
-
-      {question.explanation && <p>総合解説：{question.explanation}</p>}
-
-      <QuestionImage
-        src={question.explanationImage}
-        label={`${question.id}の解説画像`}
-      />
-
-      <ChoiceExplanations choices={question.choices} />
-    </>
-  );
+  return false;
 }
 
-function ChoiceExplanations({ choices }) {
-  return (
-    <div className="choice-explanations">
-      <p>選択肢ごとの解説：</p>
-      <ul>
-        {choices.map((choice) => (
-          <li key={choice.id}>
-            <strong>
-              {SHOW_DEBUG_INFO && `元ID ${choice.id}. `}
-              {choice.text}
-            </strong>
-            <br />
-            {choice.explanation || "解説なし"}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+function getCorrectAnswerText(question) {
+  if (question.type === "true_false") {
+    return question.answer ? "○" : "×";
+  }
+
+  const correctChoices = (question.choices ?? []).filter((choice) => choice.isCorrect);
+  if (correctChoices.length === 0) return "-";
+
+  return correctChoices.map((choice) => `${choice.id}. ${choice.text}`).join(" / ");
 }
 
-function QuestionImage({ src, label }) {
+function getUserAnswerText(question, answer) {
+  if (answer === null || answer === undefined || answer === "") return "無回答";
+
+  if (question.type === "true_false") {
+    return answer ? "○" : "×";
+  }
+
+  const selected = (question.choices ?? []).find((choice) => choice.id === answer);
+  return selected ? `${selected.id}. ${selected.text}` : String(answer);
+}
+
+function getDisplayChoices(question) {
+  const choices = Array.isArray(question.choices) ? question.choices : [];
+  if (!question.shuffleChoices) return choices;
+
+  const cacheKey = `__displayChoices_${question.id}`;
+  if (!question[cacheKey]) {
+    Object.defineProperty(question, cacheKey, {
+      value: shuffleArray(choices),
+      enumerable: false,
+      configurable: true,
+    });
+  }
+
+  return question[cacheKey];
+}
+
+function updateLearningHistory(history, result) {
+  const questionId = result.question.id;
+  const previousStat = history.questionStats?.[questionId] ?? {
+    attempts: 0,
+    correct: 0,
+    wrong: 0,
+    unanswered: 0,
+    lastResult: "",
+    consecutiveCorrect: 0,
+    lastAnsweredAt: "",
+  };
+
+  const lastResult = result.isUnanswered ? "unanswered" : result.isCorrect ? "correct" : "wrong";
+
+  const nextStat = {
+    attempts: previousStat.attempts + 1,
+    correct: previousStat.correct + (result.isCorrect ? 1 : 0),
+    wrong: previousStat.wrong + (!result.isCorrect && !result.isUnanswered ? 1 : 0),
+    unanswered: previousStat.unanswered + (result.isUnanswered ? 1 : 0),
+    lastResult,
+    consecutiveCorrect: result.isCorrect ? previousStat.consecutiveCorrect + 1 : 0,
+    lastAnsweredAt: result.answeredAt,
+  };
+
+  const wrongSet = new Set(history.wrongQuestionIds ?? []);
+
+  if (result.isCorrect) {
+    if (nextStat.consecutiveCorrect >= 2) {
+      wrongSet.delete(questionId);
+    }
+  } else {
+    wrongSet.add(questionId);
+  }
+
+  return {
+    ...history,
+    questionStats: {
+      ...(history.questionStats ?? {}),
+      [questionId]: nextStat,
+    },
+    wrongQuestionIds: Array.from(wrongSet),
+    mockExamAttempts: history.mockExamAttempts ?? [],
+  };
+}
+
+function summarizeResults(results, durationSeconds) {
+  const correct = results.filter((result) => result.isCorrect).length;
+  const unanswered = results.filter((result) => result.isUnanswered).length;
+  const wrong = results.length - correct - unanswered;
+  const score = results.reduce((sum, result) => sum + result.scoreDelta, 0);
+  const maxScore = results.reduce((sum, result) => {
+    return sum + (result.question.type === "true_false" ? TRUE_FALSE_SCORE : MULTIPLE_CHOICE_SCORE);
+  }, 0);
+  const accuracy = results.length > 0 ? Math.round((correct / results.length) * 1000) / 10 : 0;
+
+  return {
+    questionCount: results.length,
+    correct,
+    wrong,
+    unanswered,
+    score: roundScore(score),
+    maxScore: roundScore(maxScore),
+    accuracy,
+    durationSeconds,
+  };
+}
+
+function stratifiedSampleByCategory(items, targetCount) {
+  if (items.length <= targetCount) return shuffleArray(items);
+
+  const groups = new Map();
+
+  items.forEach((item) => {
+    const category = normalizeText(item.category) || "未設定";
+    const group = groups.get(category) ?? [];
+    group.push(item);
+    groups.set(category, group);
+  });
+
+  const shuffledGroups = Array.from(groups.entries()).map(([category, group]) => ({
+    category,
+    items: shuffleArray(group),
+    quota: Math.max(1, Math.round((group.length / items.length) * targetCount)),
+  }));
+
+  let selected = [];
+
+  shuffledGroups.forEach((group) => {
+    selected.push(...group.items.slice(0, group.quota));
+  });
+
+  if (selected.length > targetCount) {
+    selected = shuffleArray(selected).slice(0, targetCount);
+  }
+
+  if (selected.length < targetCount) {
+    const selectedIds = new Set(selected.map((item) => item.id));
+    const rest = shuffleArray(items.filter((item) => !selectedIds.has(item.id)));
+    selected.push(...rest.slice(0, targetCount - selected.length));
+  }
+
+  return shuffleArray(selected);
+}
+
+function shuffleArray(array) {
+  const next = [...array];
+
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[randomIndex]] = [next[randomIndex], next[index]];
+  }
+
+  return next;
+}
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return DEFAULT_HISTORY;
+
+    const parsed = JSON.parse(raw);
+
+    return {
+      questionStats: parsed.questionStats ?? {},
+      wrongQuestionIds: Array.isArray(parsed.wrongQuestionIds) ? parsed.wrongQuestionIds : [],
+      mockExamAttempts: Array.isArray(parsed.mockExamAttempts) ? parsed.mockExamAttempts : [],
+    };
+  } catch {
+    return DEFAULT_HISTORY;
+  }
+}
+
+function saveHistory(history) {
+  localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+}
+
+function renderImage(src, alt) {
   if (!src) return null;
 
   return (
-    <div className="question-image-wrapper">
-      <img src={src} alt={label} className="question-image" />
+    <div className="image-wrap">
+      <img src={src} alt={alt} />
     </div>
   );
-}
-
-function QuestionMeta({ question, showCategory = true }) {
-  const shouldShowDebugInfo = SHOW_DEBUG_INFO;
-  const shouldShowCategory = showCategory;
-
-  if (!shouldShowDebugInfo && !shouldShowCategory) {
-    return null;
-  }
-
-  return (
-    <div className="question-meta">
-      {shouldShowDebugInfo && (
-        <>
-          <p>ID：{question.id}</p>
-          <p>形式：{question.type === "true_false" ? "○×" : "択一"}</p>
-        </>
-      )}
-
-      {shouldShowCategory && <p>カテゴリ：{question.category ?? "未設定"}</p>}
-
-      {shouldShowDebugInfo && (
-        <>
-          <p>サブカテゴリ：{question.subCategory ?? "未設定"}</p>
-          {question.tags?.length > 0 && <p>タグ：{question.tags.join("、")}</p>}
-        </>
-      )}
-    </div>
-  );
-}
-
-function buildCategoryOptions(questions) {
-  const categoryMap = new Map();
-
-  questions.forEach((question) => {
-    const category = getCategoryName(question);
-    categoryMap.set(category, (categoryMap.get(category) ?? 0) + 1);
-  });
-
-  return Array.from(categoryMap.entries())
-    .map(([category, count]) => ({ category, count }))
-    .sort((a, b) => a.category.localeCompare(b.category, "ja"));
-}
-
-function buildCategoryStats(questions, results) {
-  const statsMap = new Map();
-
-  questions.forEach((question, index) => {
-    const category = question.category || "未設定";
-    const result = results[index];
-
-    if (!statsMap.has(category)) {
-      statsMap.set(category, {
-        category,
-        correct: 0,
-        wrong: 0,
-        unanswered: 0,
-      });
-    }
-
-    const stat = statsMap.get(category);
-
-    if (!result) return;
-
-    if (result.isUnanswered) {
-      stat.unanswered += 1;
-    } else if (result.isCorrect) {
-      stat.correct += 1;
-    } else {
-      stat.wrong += 1;
-    }
-  });
-
-  return Array.from(statsMap.values()).map((stat) => {
-    const answered = stat.correct + stat.wrong;
-    const accuracy = answered === 0 ? 0 : (stat.correct / answered) * 100;
-
-    return {
-      ...stat,
-      accuracy,
-    };
-  });
-}
-
-function buildMockExamReviewQuestions(questions, results) {
-  return questions.filter((question, index) => {
-    const result = results[index];
-
-    if (!result) return false;
-
-    return result.isUnanswered || !result.isCorrect;
-  });
 }
 
 function getModeTitle(mode) {
-  if (mode === "true_false") return "○×演習";
-  if (mode === "multiple_choice") return "択一演習";
-  if (mode === "mock_exam") return "本番模擬";
-  if (mode === "wrong_review") return "誤答復習";
-  if (mode === "mock_exam_review") return "今回間違えた問題の復習";
-  if (mode === "learning_history") return "学習履歴";
-  if (mode === "question_list") return "問題一覧";
-  return "学科試験演習アプリ";
+  switch (mode) {
+    case "true_false_practice":
+      return "○×演習";
+    case "multiple_choice_practice":
+      return "択一演習";
+    case "mock_exam":
+      return "本番模擬";
+    case "wrong_review":
+      return "誤答復習";
+    case "last_mock_missed_review":
+      return "今回間違えた問題の復習";
+    default:
+      return "演習";
+  }
+}
+
+function formatResultLabel(value) {
+  switch (value) {
+    case "correct":
+      return "正解";
+    case "wrong":
+      return "不正解";
+    case "unanswered":
+      return "無回答";
+    default:
+      return "-";
+  }
+}
+
+function formatScore(value) {
+  return roundScore(value).toFixed(1);
+}
+
+function roundScore(value) {
+  return Math.round(Number(value) * 10) / 10;
+}
+
+function formatDuration(seconds) {
+  const safeSeconds = Number(seconds) || 0;
+  const minutes = Math.floor(safeSeconds / 60);
+  const restSeconds = safeSeconds % 60;
+
+  if (minutes <= 0) return `${restSeconds}秒`;
+  return `${minutes}分${restSeconds}秒`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return date.toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function normalizeText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function clampNumber(value, min, max) {
+  if (Number.isNaN(value)) return min;
+  return Math.min(Math.max(value, min), max);
+}
+
+function createAttemptId() {
+  return `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export default App;
