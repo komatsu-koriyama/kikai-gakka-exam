@@ -10,8 +10,8 @@ const MULTIPLE_CHOICE_SCORE = 0.4;
 
 const LOW_ACCURACY_THRESHOLD = 70;
 
-const APP_VERSION = "0.7.0";
-const APP_UPDATED_AT = "2026-07-08";
+const APP_VERSION = "0.7.1";
+const APP_UPDATED_AT = "2026-07-09";
 const APP_SPEC_NOTE = "計算問題は現段階では除外";
 
 const DEFAULT_HISTORY = {
@@ -93,7 +93,7 @@ function App() {
         setLoadState({ loading: true, error: "" });
 
         const response = await fetch(`${import.meta.env.BASE_URL}data/questions.json`, {
-        cache: "no-store",
+          cache: "no-store",
         });
 
         if (!response.ok) {
@@ -226,7 +226,7 @@ function App() {
         ? stratifiedSampleByCategory(multipleChoicePool, 10)
         : shuffleArray(multipleChoicePool);
 
-    const selected = shuffleArray([...trueFalseSelected, ...multipleChoiceSelected]);
+    const selected = [...trueFalseSelected, ...multipleChoiceSelected];
 
     startSession({
       nextMode: "mock_exam",
@@ -295,6 +295,29 @@ function App() {
     setSessionStartedAt(null);
   }
 
+  function applyQuestionState(index, results) {
+    const savedResult = results[index] ?? null;
+
+    if (savedResult) {
+      setCurrentAnswer(savedResult.userAnswer);
+      setCurrentAnswered(true);
+      setCurrentResult(savedResult);
+      return;
+    }
+
+    setCurrentAnswer(null);
+    setCurrentAnswered(false);
+    setCurrentResult(null);
+  }
+
+  function goPreviousQuestion() {
+    if (currentIndex <= 0) return;
+
+    const previousIndex = currentIndex - 1;
+    setCurrentIndex(previousIndex);
+    applyQuestionState(previousIndex, sessionResults);
+  }
+
   function handleAnswer(answer) {
     if (!currentQuestion || currentAnswered) return;
 
@@ -304,15 +327,17 @@ function App() {
     }
 
     const result = buildAnswerResult(currentQuestion, answer);
+    const nextResults = [...sessionResults, result];
+
     setCurrentAnswer(answer);
     setCurrentAnswered(true);
     setCurrentResult(result);
-    setSessionResults((prev) => [...prev, result]);
+    setSessionResults(nextResults);
     setHistory((prev) => updateLearningHistory(prev, result));
   }
 
   function submitCurrentAnswer(answer, shouldAutoNext = false) {
-    if (!currentQuestion) return;
+    if (!currentQuestion || currentAnswered) return;
 
     const result = buildAnswerResult(currentQuestion, answer);
     const nextResults = [...sessionResults, result];
@@ -331,20 +356,23 @@ function App() {
   function handleUnanswered() {
     if (!currentQuestion) return;
 
-    if (currentAnswered && !isMockExam) {
+    if (currentAnswered) {
       goNextQuestion(sessionResults);
       return;
     }
 
     const result = buildAnswerResult(currentQuestion, null);
-    const nextResults = currentAnswered ? sessionResults : [...sessionResults, result];
+    const nextResults = [...sessionResults, result];
 
-    if (!currentAnswered) {
-      setSessionResults(nextResults);
-      setHistory((prev) => updateLearningHistory(prev, result));
+    setCurrentAnswer(null);
+    setCurrentAnswered(true);
+    setCurrentResult(result);
+    setSessionResults(nextResults);
+    setHistory((prev) => updateLearningHistory(prev, result));
+
+    if (isMockExam) {
+      goNextQuestion(nextResults);
     }
-
-    goNextQuestion(nextResults);
   }
 
   function goNextQuestion(results) {
@@ -356,9 +384,7 @@ function App() {
     }
 
     setCurrentIndex(nextIndex);
-    setCurrentAnswer(null);
-    setCurrentAnswered(false);
-    setCurrentResult(null);
+    applyQuestionState(nextIndex, results);
   }
 
   function finishSession(results) {
@@ -628,7 +654,7 @@ function App() {
       <header className="app-header">
         <div>
           <p className="app-kicker">技能競技大会</p>
-          <h1>機械部門 学科試験演習</h1>
+          <h1>機械部門 学科試験</h1>
         </div>
         <div className="header-badge">
           <span>問題数</span>
@@ -685,6 +711,8 @@ function App() {
           currentAnswer={currentAnswer}
           currentAnswered={currentAnswered}
           currentResult={currentResult}
+          canGoPrevious={currentIndex > 0}
+          onPrevious={goPreviousQuestion}
           onAnswer={handleAnswer}
           onUnanswered={handleUnanswered}
           onBack={isMockExam ? backToMenuFromMockExam : backToMenu}
@@ -770,7 +798,6 @@ function MenuScreen({
       <section className="menu-section">
         <div className="section-title-row">
           <h2>演習</h2>
-          <p>スマートフォンでの利用を想定した演習メニューです。</p>
         </div>
 
         <div className="menu-grid">
@@ -989,6 +1016,8 @@ function PracticeScreen({
   currentAnswer,
   currentAnswered,
   currentResult,
+  canGoPrevious,
+  onPrevious,
   onAnswer,
   onUnanswered,
   onBack,
@@ -1009,6 +1038,7 @@ function PracticeScreen({
 
   const isMockExam = mode === "mock_exam";
   const modeTitle = getModeTitle(mode);
+  const nextButtonLabel = currentAnswered ? "次の問題へ" : isMockExam ? "無回答で次へ" : "無回答で解説を見る";
 
   return (
     <main className="screen practice-screen">
@@ -1095,8 +1125,11 @@ function PracticeScreen({
         )}
 
         <div className="practice-actions">
+          <button className="wide-button secondary" onClick={onPrevious} disabled={!canGoPrevious}>
+            前の問題へ
+          </button>
           <button className="wide-button secondary" onClick={onUnanswered}>
-            {currentAnswered && !isMockExam ? "次の問題へ" : "無回答で次へ"}
+            {nextButtonLabel}
           </button>
         </div>
       </section>
@@ -2142,9 +2175,13 @@ function saveHistory(history) {
 function renderImage(src, alt) {
   if (!src) return null;
 
-  const normalizedSrc = String(src).startsWith("/")
-    ? `${import.meta.env.BASE_URL}${String(src).replace(/^\/+/, "")}`
-    : `${import.meta.env.BASE_URL}${String(src).replace(/^\.?\//, "")}`;
+  const rawSrc = String(src).trim();
+  if (!rawSrc) return null;
+
+  const normalizedSrc =
+    rawSrc.startsWith("http://") || rawSrc.startsWith("https://") || rawSrc.startsWith("data:")
+      ? rawSrc
+      : `${import.meta.env.BASE_URL}${rawSrc.replace(/^\/+/, "").replace(/^\.?\//, "")}`;
 
   return (
     <div className="image-wrap">
