@@ -11,7 +11,7 @@ const MULTIPLE_CHOICE_SCORE = 0.4;
 
 const LOW_ACCURACY_THRESHOLD = 70;
 
-const APP_VERSION = "0.7.5";
+const APP_VERSION = "0.7.6";
 const APP_UPDATED_AT = "2026-07-09";
 const APP_SPEC_NOTE = "計算問題は現段階では除外";
 
@@ -1529,7 +1529,7 @@ function HistoryScreen({
   }
 
   return (
-    <main className="screen">
+    <main className="screen history-screen">
       <div className="page-title-row">
         <div>
           <p className="app-kicker">確認</p>
@@ -1540,7 +1540,7 @@ function HistoryScreen({
         </button>
       </div>
 
-      <section className="summary-grid">
+      <section className="summary-grid history-summary-grid">
         <div className="summary-card">
           <span>総回答回数</span>
           <strong>{summary.total}</strong>
@@ -1567,48 +1567,98 @@ function HistoryScreen({
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel history-mock-panel">
         <h3>本番模擬の点数推移</h3>
+
         {mockExamAttempts.length === 0 ? (
           <p className="muted-text">本番模擬の記録はまだありません。</p>
         ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>実施日時</th>
-                  <th>得点</th>
-                  <th>満点</th>
-                  <th>正答</th>
-                  <th>誤答</th>
-                  <th>無回答</th>
-                  <th>正答率</th>
-                  <th>所要時間</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockExamAttempts
-                  .slice()
-                  .reverse()
-                  .map((attempt) => (
-                    <tr key={attempt.id}>
-                      <td>{formatDateTime(attempt.answeredAt)}</td>
-                      <td>{formatScore(attempt.score)}</td>
-                      <td>{formatScore(attempt.maxScore)}</td>
-                      <td>{attempt.correct}</td>
-                      <td className={attempt.wrong > 0 ? "danger-text" : ""}>{attempt.wrong}</td>
-                      <td className={attempt.unanswered > 0 ? "warning-text" : ""}>{attempt.unanswered}</td>
-                      <td>{attempt.accuracy}%</td>
-                      <td>{formatDuration(attempt.durationSeconds)}</td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="table-scroll history-mock-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>実施日時</th>
+                    <th>得点</th>
+                    <th>満点</th>
+                    <th>正答</th>
+                    <th>誤答</th>
+                    <th>無回答</th>
+                    <th>正答率</th>
+                    <th>所要時間</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mockExamAttempts
+                    .slice()
+                    .reverse()
+                    .map((attempt) => (
+                      <tr key={attempt.id}>
+                        <td>{formatDateTime(attempt.answeredAt)}</td>
+                        <td>{formatScore(attempt.score)}</td>
+                        <td>{formatScore(attempt.maxScore)}</td>
+                        <td>{attempt.correct}</td>
+                        <td className={attempt.wrong > 0 ? "danger-text" : ""}>{attempt.wrong}</td>
+                        <td className={attempt.unanswered > 0 ? "warning-text" : ""}>{attempt.unanswered}</td>
+                        <td>{attempt.accuracy}%</td>
+                        <td>{formatDuration(attempt.durationSeconds)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="history-mock-card-list">
+              {mockExamAttempts
+                .slice()
+                .reverse()
+                .map((attempt) => (
+                  <article key={attempt.id} className="history-mock-card">
+                    <div className="history-mock-card-head">
+                      <div>
+                        <span>実施日時</span>
+                        <strong>{formatDateTime(attempt.answeredAt)}</strong>
+                      </div>
+                      <div className="history-mock-score">
+                        <span>得点</span>
+                        <strong>{formatScore(attempt.score)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="history-mock-card-stats">
+                      <div>
+                        <span>満点</span>
+                        <strong>{formatScore(attempt.maxScore)}</strong>
+                      </div>
+                      <div>
+                        <span>正答</span>
+                        <strong>{attempt.correct}</strong>
+                      </div>
+                      <div>
+                        <span>誤答</span>
+                        <strong className={attempt.wrong > 0 ? "danger-text" : ""}>{attempt.wrong}</strong>
+                      </div>
+                      <div>
+                        <span>無回答</span>
+                        <strong className={attempt.unanswered > 0 ? "warning-text" : ""}>{attempt.unanswered}</strong>
+                      </div>
+                      <div>
+                        <span>正答率</span>
+                        <strong>{attempt.accuracy}%</strong>
+                      </div>
+                      <div>
+                        <span>所要時間</span>
+                        <strong>{formatDuration(attempt.durationSeconds)}</strong>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+            </div>
+          </>
         )}
       </section>
 
-      <section className="panel">
+      <section className="panel history-weakness-panel">
         <h3>問題別の弱点確認</h3>
 
         <div className="history-filter-layout">
@@ -1616,7 +1666,9 @@ function HistoryScreen({
             <div className="category-select-header">
               <div>
                 <h3>カテゴリ</h3>
-                <p className="muted-text">複数選択できます。未選択の場合は、すべてのカテゴリを表示します。</p>
+                <p className="muted-text">
+                  複数選択できます。未選択の場合は、すべてのカテゴリを表示します。
+                </p>
               </div>
 
               <button className="ghost-button small" onClick={clearCategories} disabled={isAllSelected}>
@@ -1647,7 +1699,7 @@ function HistoryScreen({
           </div>
 
           <div className="history-option-filter-grid">
-            <label className="check-field">
+            <label className="check-field history-check-field">
               <input
                 type="checkbox"
                 checked={filters.lowAccuracyOnly}
@@ -1656,7 +1708,7 @@ function HistoryScreen({
               <span>正答率が低い問題</span>
             </label>
 
-            <label className="check-field">
+            <label className="check-field history-check-field">
               <input
                 type="checkbox"
                 checked={filters.wrongOnly}
@@ -1665,7 +1717,7 @@ function HistoryScreen({
               <span>誤答復習対象</span>
             </label>
 
-            <label className="check-field">
+            <label className="check-field history-check-field">
               <input
                 type="checkbox"
                 checked={filters.includeUnansweredOnly}
