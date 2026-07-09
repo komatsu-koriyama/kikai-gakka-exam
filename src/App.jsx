@@ -10,7 +10,7 @@ const MULTIPLE_CHOICE_SCORE = 0.4;
 
 const LOW_ACCURACY_THRESHOLD = 70;
 
-const APP_VERSION = "0.7.1";
+const APP_VERSION = "0.7.2";
 const APP_UPDATED_AT = "2026-07-09";
 const APP_SPEC_NOTE = "計算問題は現段階では除外";
 
@@ -145,7 +145,9 @@ function App() {
   const currentQuestion = sessionQuestions[currentIndex] ?? null;
   const isMockExam = mode === "mock_exam";
   const totalQuestions = sessionQuestions.length;
-  const answeredCount = sessionResults.length;
+  const completedSessionResults = useMemo(() => sessionResults.filter(Boolean), [sessionResults]);
+  const answeredCount = completedSessionResults.length;
+  const hasCurrentRecordedResult = Boolean(sessionResults[currentIndex]);
   const progressCurrentNumber = totalQuestions === 0 ? 0 : Math.min(currentIndex + 1, totalQuestions);
   const remainingCount = totalQuestions === 0 ? 0 : Math.max(totalQuestions - progressCurrentNumber, 0);
   const progressPercent = totalQuestions === 0 ? 0 : Math.round((currentIndex / totalQuestions) * 100);
@@ -295,13 +297,25 @@ function App() {
     setSessionStartedAt(null);
   }
 
+  function replaceSessionResult(results, index, result) {
+    const nextResults = [...results];
+    nextResults[index] = result;
+    return nextResults;
+  }
+
   function applyQuestionState(index, results) {
     const savedResult = results[index] ?? null;
 
     if (savedResult) {
       setCurrentAnswer(savedResult.userAnswer);
-      setCurrentAnswered(true);
       setCurrentResult(savedResult);
+
+      if (mode === "mock_exam") {
+        setCurrentAnswered(false);
+      } else {
+        setCurrentAnswered(true);
+      }
+
       return;
     }
 
@@ -319,34 +333,32 @@ function App() {
   }
 
   function handleAnswer(answer) {
-    if (!currentQuestion || currentAnswered) return;
+    if (!currentQuestion) return;
+    if (!isMockExam && currentAnswered) return;
 
     if (isMockExam) {
       submitCurrentAnswer(answer, true);
       return;
     }
 
-    const result = buildAnswerResult(currentQuestion, answer);
-    const nextResults = [...sessionResults, result];
-
-    setCurrentAnswer(answer);
-    setCurrentAnswered(true);
-    setCurrentResult(result);
-    setSessionResults(nextResults);
-    setHistory((prev) => updateLearningHistory(prev, result));
+    submitCurrentAnswer(answer, false);
   }
 
   function submitCurrentAnswer(answer, shouldAutoNext = false) {
-    if (!currentQuestion || currentAnswered) return;
+    if (!currentQuestion) return;
+    if (!isMockExam && currentAnswered) return;
 
     const result = buildAnswerResult(currentQuestion, answer);
-    const nextResults = [...sessionResults, result];
+    const nextResults = replaceSessionResult(sessionResults, currentIndex, result);
 
     setCurrentAnswer(answer);
-    setCurrentAnswered(true);
     setCurrentResult(result);
+    setCurrentAnswered(!isMockExam);
     setSessionResults(nextResults);
-    setHistory((prev) => updateLearningHistory(prev, result));
+
+    if (!isMockExam) {
+      setHistory((prev) => updateLearningHistory(prev, result));
+    }
 
     if (shouldAutoNext) {
       goNextQuestion(nextResults);
@@ -356,19 +368,27 @@ function App() {
   function handleUnanswered() {
     if (!currentQuestion) return;
 
-    if (currentAnswered) {
+    if (isMockExam && hasCurrentRecordedResult) {
+      goNextQuestion(sessionResults);
+      return;
+    }
+
+    if (!isMockExam && currentAnswered) {
       goNextQuestion(sessionResults);
       return;
     }
 
     const result = buildAnswerResult(currentQuestion, null);
-    const nextResults = [...sessionResults, result];
+    const nextResults = replaceSessionResult(sessionResults, currentIndex, result);
 
     setCurrentAnswer(null);
-    setCurrentAnswered(true);
     setCurrentResult(result);
+    setCurrentAnswered(!isMockExam);
     setSessionResults(nextResults);
-    setHistory((prev) => updateLearningHistory(prev, result));
+
+    if (!isMockExam) {
+      setHistory((prev) => updateLearningHistory(prev, result));
+    }
 
     if (isMockExam) {
       goNextQuestion(nextResults);
@@ -388,34 +408,42 @@ function App() {
   }
 
   function finishSession(results) {
+    const completedResults = results.filter(Boolean);
     const durationSeconds = sessionStartedAt ? Math.max(0, Math.round((Date.now() - sessionStartedAt) / 1000)) : 0;
-    const missedIds = results
+    const missedIds = completedResults
       .filter((result) => !result.isCorrect)
       .map((result) => result.question.id);
 
     setLastMissedQuestionIds(missedIds);
 
     if (mode === "mock_exam") {
-      const summary = summarizeResults(results, durationSeconds);
+      const summary = summarizeResults(completedResults, durationSeconds);
 
-      setHistory((prev) => ({
-        ...prev,
-        mockExamAttempts: [
-          ...(prev.mockExamAttempts ?? []),
-          {
-            id: createAttemptId(),
-            answeredAt: new Date().toISOString(),
-            questionCount: summary.questionCount,
-            correct: summary.correct,
-            wrong: summary.wrong,
-            unanswered: summary.unanswered,
-            score: summary.score,
-            maxScore: summary.maxScore,
-            accuracy: summary.accuracy,
-            durationSeconds,
-          },
-        ],
-      }));
+      setHistory((prev) => {
+        const historyWithQuestionStats = completedResults.reduce(
+          (nextHistory, result) => updateLearningHistory(nextHistory, result),
+          prev
+        );
+
+        return {
+          ...historyWithQuestionStats,
+          mockExamAttempts: [
+            ...(historyWithQuestionStats.mockExamAttempts ?? []),
+            {
+              id: createAttemptId(),
+              answeredAt: new Date().toISOString(),
+              questionCount: summary.questionCount,
+              correct: summary.correct,
+              wrong: summary.wrong,
+              unanswered: summary.unanswered,
+              score: summary.score,
+              maxScore: summary.maxScore,
+              accuracy: summary.accuracy,
+              durationSeconds,
+            },
+          ],
+        };
+      });
     }
 
     setCurrentAnswer(null);
@@ -470,13 +498,13 @@ function App() {
 
   const resultSummary = useMemo(() => {
     const durationSeconds = sessionStartedAt ? Math.max(0, Math.round((Date.now() - sessionStartedAt) / 1000)) : 0;
-    return summarizeResults(sessionResults, durationSeconds);
-  }, [sessionResults, sessionStartedAt]);
+    return summarizeResults(completedSessionResults, durationSeconds);
+  }, [completedSessionResults, sessionStartedAt]);
 
   const categoryResultRows = useMemo(() => {
     const map = new Map();
 
-    sessionResults.forEach((result) => {
+    completedSessionResults.forEach((result) => {
       const category = normalizeText(result.question.category) || "未設定";
       const current = map.get(category) ?? {
         category,
@@ -499,7 +527,7 @@ function App() {
       ...row,
       accuracy: row.total > 0 ? Math.round((row.correct / row.total) * 1000) / 10 : 0,
     }));
-  }, [sessionResults]);
+  }, [completedSessionResults]);
 
   const historyRows = useMemo(() => {
     const selectedCategorySet = new Set(historyFilters.categories ?? []);
@@ -711,6 +739,7 @@ function App() {
           currentAnswer={currentAnswer}
           currentAnswered={currentAnswered}
           currentResult={currentResult}
+          hasRecordedAnswer={hasCurrentRecordedResult}
           canGoPrevious={currentIndex > 0}
           onPrevious={goPreviousQuestion}
           onAnswer={handleAnswer}
@@ -723,7 +752,7 @@ function App() {
         <ResultScreen
           mode={mode}
           summary={resultSummary}
-          results={sessionResults}
+          results={completedSessionResults}
           categoryRows={categoryResultRows}
           onBackToMenu={backToMenu}
           onReviewMissed={startLastMissedReview}
@@ -990,9 +1019,7 @@ function SetupScreen({
         <div className="setup-status">
           対象問題数：<strong>{questionCount}</strong> 問
           {setupCategories.length > 0 && (
-            <span className="selected-category-summary">
-              選択中：{setupCategories.length}カテゴリ
-            </span>
+            <span className="selected-category-summary">選択中：{setupCategories.length}カテゴリ</span>
           )}
         </div>
 
@@ -1016,6 +1043,7 @@ function PracticeScreen({
   currentAnswer,
   currentAnswered,
   currentResult,
+  hasRecordedAnswer,
   canGoPrevious,
   onPrevious,
   onAnswer,
@@ -1038,7 +1066,14 @@ function PracticeScreen({
 
   const isMockExam = mode === "mock_exam";
   const modeTitle = getModeTitle(mode);
-  const nextButtonLabel = currentAnswered ? "次の問題へ" : isMockExam ? "無回答で次へ" : "無回答で解説を見る";
+  const answerDisabled = !isMockExam && currentAnswered;
+  const nextButtonLabel = currentAnswered
+    ? "次の問題へ"
+    : isMockExam && hasRecordedAnswer
+      ? "次の問題へ"
+      : isMockExam
+        ? "無回答で次へ"
+        : "無回答で解説を見る";
 
   return (
     <main className="screen practice-screen">
@@ -1066,7 +1101,13 @@ function PracticeScreen({
             <div className="mock-progress-remaining">残り {remainingCount}問</div>
           </div>
 
-          <div className="progress-track" role="progressbar" aria-valuenow={progressPercent} aria-valuemin="0" aria-valuemax="100">
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-valuenow={progressPercent}
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
             <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
           </div>
 
@@ -1092,14 +1133,14 @@ function PracticeScreen({
             <button
               className={`answer-button tf-button ${currentAnswer === true ? "selected" : ""}`}
               onClick={() => onAnswer(true)}
-              disabled={currentAnswered}
+              disabled={answerDisabled}
             >
               ○
             </button>
             <button
               className={`answer-button tf-button ${currentAnswer === false ? "selected" : ""}`}
               onClick={() => onAnswer(false)}
-              disabled={currentAnswered}
+              disabled={answerDisabled}
             >
               ×
             </button>
@@ -1111,17 +1152,13 @@ function PracticeScreen({
                 key={choice.id}
                 className={`answer-button choice-button ${currentAnswer === choice.id ? "selected" : ""}`}
                 onClick={() => onAnswer(choice.id)}
-                disabled={currentAnswered}
+                disabled={answerDisabled}
               >
                 <span className="choice-id">{choice.id}</span>
                 <span>{choice.text}</span>
               </button>
             ))}
           </div>
-        )}
-
-        {!isMockExam && currentAnswered && currentResult && (
-          <AnswerFeedback question={question} result={currentResult} />
         )}
 
         <div className="practice-actions">
@@ -1132,6 +1169,10 @@ function PracticeScreen({
             {nextButtonLabel}
           </button>
         </div>
+
+        {!isMockExam && currentAnswered && currentResult && (
+          <AnswerFeedback question={question} result={currentResult} />
+        )}
       </section>
     </main>
   );
@@ -1140,9 +1181,7 @@ function PracticeScreen({
 function AnswerFeedback({ question, result }) {
   return (
     <div className={`feedback-card ${result.isCorrect ? "correct" : "wrong"}`}>
-      <div className="feedback-title">
-        {result.isUnanswered ? "無回答" : result.isCorrect ? "正解" : "不正解"}
-      </div>
+      <div className="feedback-title">{result.isUnanswered ? "無回答" : result.isCorrect ? "正解" : "不正解"}</div>
 
       <div className="feedback-row">
         <span>正解</span>
@@ -1178,22 +1217,12 @@ function AnswerFeedback({ question, result }) {
 
       {renderImage(question.explanationImage, "解説画像")}
 
-      {SHOW_DEBUG_INFO && (
-        <pre className="debug-block">{JSON.stringify(result, null, 2)}</pre>
-      )}
+      {SHOW_DEBUG_INFO && <pre className="debug-block">{JSON.stringify(result, null, 2)}</pre>}
     </div>
   );
 }
 
-function ResultScreen({
-  mode,
-  summary,
-  results,
-  categoryRows,
-  onBackToMenu,
-  onReviewMissed,
-  showMissedReview,
-}) {
+function ResultScreen({ mode, summary, results, categoryRows, onBackToMenu, onReviewMissed, showMissedReview }) {
   const [showOnlyMissed, setShowOnlyMissed] = useState(false);
 
   const missedResults = results.filter((result) => !result.isCorrect);
@@ -1548,9 +1577,7 @@ function HistoryScreen({
         <div className="list-count">
           表示件数：{rows.length} 件
           {selectedCategories.length > 0 && (
-            <span className="selected-category-summary">
-              選択中：{selectedCategories.length}カテゴリ
-            </span>
+            <span className="selected-category-summary">選択中：{selectedCategories.length}カテゴリ</span>
           )}
         </div>
 
@@ -1827,9 +1854,7 @@ function QuestionListScreen({
         <div className="list-count">
           表示件数：{questions.length} 件
           {selectedCategories.length > 0 && (
-            <span className="selected-category-summary">
-              選択中：{selectedCategories.length}カテゴリ
-            </span>
+            <span className="selected-category-summary">選択中：{selectedCategories.length}カテゴリ</span>
           )}
         </div>
 
