@@ -268,9 +268,44 @@ button:disabled {
   background: #eff6ff;
 }
 
+.menu-button.primary span {
+  color: #1e3a8a;
+}
+
 .menu-button.accent {
   border-color: #c4b5fd;
   background: #f5f3ff;
+}
+
+.menu-button.accent span {
+  color: #4c1d95;
+}
+
+.menu-button.review {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+
+.menu-button.review span {
+  color: #9a3412;
+}
+
+.menu-button.history {
+  border-color: #86efac;
+  background: #ecfdf5;
+}
+
+.menu-button.history span {
+  color: #166534;
+}
+
+.menu-button.list {
+  border-color: #67e8f9;
+  background: #ecfeff;
+}
+
+.menu-button.list span {
+  color: #155e75;
 }
 
 .menu-button:not(:disabled):hover,
@@ -280,6 +315,21 @@ button:disabled {
   transform: translateY(-1px);
   border-color: #2563eb;
   box-shadow: 0 12px 28px rgba(37, 99, 235, 0.14);
+}
+
+.menu-button.review:not(:disabled):hover {
+  border-color: #f97316;
+  box-shadow: 0 12px 28px rgba(249, 115, 22, 0.16);
+}
+
+.menu-button.history:not(:disabled):hover {
+  border-color: #22c55e;
+  box-shadow: 0 12px 28px rgba(34, 197, 94, 0.16);
+}
+
+.menu-button.list:not(:disabled):hover {
+  border-color: #06b6d4;
+  box-shadow: 0 12px 28px rgba(6, 182, 212, 0.16);
 }
 
 .wide-button {

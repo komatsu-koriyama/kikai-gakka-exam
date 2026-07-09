@@ -10,7 +10,7 @@ const MULTIPLE_CHOICE_SCORE = 0.4;
 
 const LOW_ACCURACY_THRESHOLD = 70;
 
-const APP_VERSION = "0.7.2";
+const APP_VERSION = "0.7.3";
 const APP_UPDATED_AT = "2026-07-09";
 const APP_SPEC_NOTE = "計算問題は現段階では除外";
 
@@ -845,7 +845,7 @@ function MenuScreen({
             <small>○×60問＋択一10問</small>
           </button>
 
-          <button className="menu-button" onClick={onStartWrongReview} disabled={!canStartWrongReview}>
+          <button className="menu-button review" onClick={onStartWrongReview} disabled={!canStartWrongReview}>
             <span>誤答復習</span>
             <small>指定した順序で復習</small>
           </button>
@@ -872,12 +872,12 @@ function MenuScreen({
         </div>
 
         <div className="menu-grid">
-          <button className="menu-button" onClick={onOpenHistory}>
+          <button className="menu-button history" onClick={onOpenHistory}>
             <span>学習履歴を確認</span>
             <small>点数推移・弱点確認・履歴リセット</small>
           </button>
 
-          <button className="menu-button" onClick={onOpenQuestionList}>
+          <button className="menu-button list" onClick={onOpenQuestionList}>
             <span>問題一覧</span>
             <small>検索・詳細確認</small>
           </button>
