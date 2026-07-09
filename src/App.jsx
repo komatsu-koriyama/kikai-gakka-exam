@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
 const HISTORY_STORAGE_KEY = "kikaiGakkaExamLearningHistory";
+const AUTH_STORAGE_KEY = "kikaiGakkaExamAuthenticated";
+const AUTH_PASSWORD = "koriyamakikai";
 const SHOW_DEBUG_INFO = false;
 
 const TRUE_FALSE_SCORE = 0.2;
@@ -10,7 +12,7 @@ const MULTIPLE_CHOICE_SCORE = 0.4;
 
 const LOW_ACCURACY_THRESHOLD = 70;
 
-const APP_VERSION = "0.7.3";
+const APP_VERSION = "0.7.4";
 const APP_UPDATED_AT = "2026-07-09";
 const APP_SPEC_NOTE = "計算問題は現段階では除外";
 
@@ -36,6 +38,7 @@ const WRONG_REVIEW_ORDER_OPTIONS = [
 ];
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => loadAuthentication());
   const [questions, setQuestions] = useState([]);
   const [questionDataMeta, setQuestionDataMeta] = useState({
     version: "",
@@ -88,6 +91,8 @@ function App() {
   const [expandedQuestionIds, setExpandedQuestionIds] = useState(() => new Set());
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     async function loadQuestions() {
       try {
         setLoadState({ loading: true, error: "" });
@@ -128,11 +133,21 @@ function App() {
     }
 
     loadQuestions();
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     saveHistory(history);
   }, [history]);
+
+  function handleAuthenticate(password) {
+    if (password.trim() !== AUTH_PASSWORD) {
+      return false;
+    }
+
+    localStorage.setItem(AUTH_STORAGE_KEY, "true");
+    setIsAuthenticated(true);
+    return true;
+  }
 
   const categories = useMemo(() => {
     const values = questions
@@ -657,6 +672,10 @@ function App() {
     }).length;
   }, [questions, setupType, setupCategories]);
 
+  if (!isAuthenticated) {
+    return <AuthScreen onAuthenticate={handleAuthenticate} />;
+  }
+
   if (loadState.loading) {
     return (
       <div className="app-shell">
@@ -786,6 +805,60 @@ function App() {
           onBack={backToMenu}
         />
       )}
+    </div>
+  );
+}
+
+function AuthScreen({ onAuthenticate }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+
+    const authenticated = onAuthenticate(password);
+
+    if (!authenticated) {
+      setError("パスワードが違います。");
+      setPassword("");
+    }
+  }
+
+  return (
+    <div className="auth-shell">
+      <main className="auth-card">
+        <div>
+          <p className="app-kicker">技能競技大会</p>
+          <h1>機械部門 学科試験</h1>
+          <p className="auth-description">利用を開始するにはパスワードを入力してください。</p>
+        </div>
+
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label className="form-field">
+            <span>パスワード</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setError("");
+              }}
+              autoComplete="current-password"
+              autoFocus
+            />
+          </label>
+
+          {error && <p className="auth-error">{error}</p>}
+
+          <button className="wide-button primary" type="submit">
+            開始する
+          </button>
+        </form>
+
+        <p className="auth-note">
+          認証済み状態はこのブラウザに保存されます。新しい端末や別ブラウザでは再入力が必要です。
+        </p>
+      </main>
     </div>
   );
 }
@@ -2174,6 +2247,14 @@ function shuffleArray(array) {
   }
 
   return next;
+}
+
+function loadAuthentication() {
+  try {
+    return localStorage.getItem(AUTH_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
 }
 
 function loadHistory() {
