@@ -1,4 +1,3 @@
-// src/App.jsx
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
@@ -12,7 +11,7 @@ const MULTIPLE_CHOICE_SCORE = 0.4;
 
 const LOW_ACCURACY_THRESHOLD = 70;
 
-const APP_VERSION = "0.7.4";
+const APP_VERSION = "0.7.5";
 const APP_UPDATED_AT = "2026-07-09";
 const APP_SPEC_NOTE = "計算問題は現段階では除外";
 
@@ -39,6 +38,7 @@ const WRONG_REVIEW_ORDER_OPTIONS = [
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => loadAuthentication());
+
   const [questions, setQuestions] = useState([]);
   const [questionDataMeta, setQuestionDataMeta] = useState({
     version: "",
@@ -150,10 +150,7 @@ function App() {
   }
 
   const categories = useMemo(() => {
-    const values = questions
-      .map((question) => normalizeText(question.category))
-      .filter(Boolean);
-
+    const values = questions.map((question) => normalizeText(question.category)).filter(Boolean);
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "ja"));
   }, [questions]);
 
@@ -425,9 +422,7 @@ function App() {
   function finishSession(results) {
     const completedResults = results.filter(Boolean);
     const durationSeconds = sessionStartedAt ? Math.max(0, Math.round((Date.now() - sessionStartedAt) / 1000)) : 0;
-    const missedIds = completedResults
-      .filter((result) => !result.isCorrect)
-      .map((result) => result.question.id);
+    const missedIds = completedResults.filter((result) => !result.isCorrect).map((result) => result.question.id);
 
     setLastMissedQuestionIds(missedIds);
 
@@ -502,11 +497,13 @@ function App() {
   function toggleQuestionDetail(questionId) {
     setExpandedQuestionIds((prev) => {
       const next = new Set(prev);
+
       if (next.has(questionId)) {
         next.delete(questionId);
       } else {
         next.add(questionId);
       }
+
       return next;
     });
   }
@@ -1302,7 +1299,7 @@ function ResultScreen({ mode, summary, results, categoryRows, onBackToMenu, onRe
   const displayResults = showOnlyMissed ? missedResults : results;
 
   return (
-    <main className="screen">
+    <main className="screen result-screen">
       <div className="page-title-row">
         <div>
           <p className="app-kicker">{getModeTitle(mode)}</p>
@@ -1313,7 +1310,7 @@ function ResultScreen({ mode, summary, results, categoryRows, onBackToMenu, onRe
         </button>
       </div>
 
-      <section className="summary-grid">
+      <section className="summary-grid result-summary-grid">
         <div className="summary-card">
           <span>出題数</span>
           <strong>{summary.questionCount}</strong>
@@ -1358,41 +1355,74 @@ function ResultScreen({ mode, summary, results, categoryRows, onBackToMenu, onRe
         </section>
       )}
 
-      <section className="panel">
+      <section className="panel result-category-panel">
         <h3>カテゴリ別正答率</h3>
+
         {categoryRows.length === 0 ? (
           <p className="muted-text">表示する結果がありません。</p>
         ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>カテゴリ</th>
-                  <th>出題数</th>
-                  <th>正答</th>
-                  <th>誤答</th>
-                  <th>無回答</th>
-                  <th>正答率</th>
-                </tr>
-              </thead>
-              <tbody>
-                {categoryRows.map((row) => (
-                  <tr key={row.category}>
-                    <td>{row.category}</td>
-                    <td>{row.total}</td>
-                    <td>{row.correct}</td>
-                    <td className={row.wrong > 0 ? "danger-text" : ""}>{row.wrong}</td>
-                    <td className={row.unanswered > 0 ? "warning-text" : ""}>{row.unanswered}</td>
-                    <td>{row.accuracy}%</td>
+          <>
+            <div className="table-scroll result-category-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>カテゴリ</th>
+                    <th>出題数</th>
+                    <th>正答</th>
+                    <th>誤答</th>
+                    <th>無回答</th>
+                    <th>正答率</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {categoryRows.map((row) => (
+                    <tr key={row.category}>
+                      <td>{row.category}</td>
+                      <td>{row.total}</td>
+                      <td>{row.correct}</td>
+                      <td className={row.wrong > 0 ? "danger-text" : ""}>{row.wrong}</td>
+                      <td className={row.unanswered > 0 ? "warning-text" : ""}>{row.unanswered}</td>
+                      <td>{row.accuracy}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="category-result-card-list">
+              {categoryRows.map((row) => (
+                <article key={row.category} className="category-result-card">
+                  <div className="category-result-card-head">
+                    <strong>{row.category}</strong>
+                    <span>{row.accuracy}%</span>
+                  </div>
+
+                  <div className="category-result-card-stats">
+                    <div>
+                      <span>出題</span>
+                      <strong>{row.total}</strong>
+                    </div>
+                    <div>
+                      <span>正答</span>
+                      <strong>{row.correct}</strong>
+                    </div>
+                    <div>
+                      <span>誤答</span>
+                      <strong className={row.wrong > 0 ? "danger-text" : ""}>{row.wrong}</strong>
+                    </div>
+                    <div>
+                      <span>無回答</span>
+                      <strong className={row.unanswered > 0 ? "warning-text" : ""}>{row.unanswered}</strong>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
         )}
       </section>
 
-      <section className="panel">
+      <section className="panel result-answer-panel">
         <div className="result-list-header">
           <div>
             <h3>解答一覧</h3>
@@ -1439,11 +1469,14 @@ function ResultScreen({ mode, summary, results, categoryRows, onBackToMenu, onRe
                     </strong>
                     <span>{result.isUnanswered ? "無回答" : result.isCorrect ? "正解" : "不正解"}</span>
                   </div>
+
                   <p>{result.question.question}</p>
+
                   <div className="result-answer-row">
                     <span>あなたの回答：{result.userAnswerText}</span>
                     <span>正解：{getCorrectAnswerText(result.question)}</span>
                   </div>
+
                   {result.question.explanation && <p className="muted-text">{result.question.explanation}</p>}
                 </div>
               );
@@ -1583,9 +1616,7 @@ function HistoryScreen({
             <div className="category-select-header">
               <div>
                 <h3>カテゴリ</h3>
-                <p className="muted-text">
-                  複数選択できます。未選択の場合は、すべてのカテゴリを表示します。
-                </p>
+                <p className="muted-text">複数選択できます。未選択の場合は、すべてのカテゴリを表示します。</p>
               </div>
 
               <button className="ghost-button small" onClick={clearCategories} disabled={isAllSelected}>
@@ -1888,9 +1919,7 @@ function QuestionListScreen({
               <div className="category-select-header">
                 <div>
                   <h3>カテゴリ</h3>
-                  <p className="muted-text">
-                    複数選択できます。未選択の場合は、すべてのカテゴリを表示します。
-                  </p>
+                  <p className="muted-text">複数選択できます。未選択の場合は、すべてのカテゴリを表示します。</p>
                 </div>
 
                 <button className="ghost-button small" onClick={clearCategories} disabled={isAllSelected}>
