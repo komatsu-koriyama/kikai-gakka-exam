@@ -11,7 +11,7 @@ const MULTIPLE_CHOICE_SCORE = 0.4;
 
 const LOW_ACCURACY_THRESHOLD = 70;
 
-const APP_VERSION = "0.7.6";
+const APP_VERSION = "0.7.7";
 const APP_UPDATED_AT = "2026-07-09";
 const APP_SPEC_NOTE = "計算問題は現段階では除外";
 
@@ -720,6 +720,9 @@ function App() {
           onStartWrongReview={startWrongReview}
           onOpenHistory={() => setScreen("history")}
           onOpenQuestionList={() => setScreen("question_list")}
+          onResetAllHistory={resetAllLearningHistory}
+          onResetMockExamHistory={resetMockExamHistory}
+          onClearWrongReviewTargets={clearWrongReviewTargets}
           canStartWrongReview={(history.wrongQuestionIds?.length ?? 0) > 0}
         />
       )}
@@ -784,9 +787,6 @@ function App() {
           categories={categories}
           filters={historyFilters}
           onFilterChange={setHistoryFilters}
-          onResetAllHistory={resetAllLearningHistory}
-          onResetMockExamHistory={resetMockExamHistory}
-          onClearWrongReviewTargets={clearWrongReviewTargets}
           onBack={backToMenu}
         />
       )}
@@ -873,6 +873,9 @@ function MenuScreen({
   onStartWrongReview,
   onOpenHistory,
   onOpenQuestionList,
+  onResetAllHistory,
+  onResetMockExamHistory,
+  onClearWrongReviewTargets,
   canStartWrongReview,
 }) {
   return (
@@ -944,12 +947,29 @@ function MenuScreen({
         <div className="menu-grid">
           <button className="menu-button history" onClick={onOpenHistory}>
             <span>学習履歴を確認</span>
-            <small>点数推移・弱点確認・履歴リセット</small>
+            <small>点数推移・弱点確認</small>
           </button>
 
           <button className="menu-button list" onClick={onOpenQuestionList}>
             <span>問題一覧</span>
             <small>検索・詳細確認</small>
+          </button>
+        </div>
+      </section>
+
+      <section className="panel reset-history-panel">
+        <h3>学習履歴のリセット</h3>
+        <p className="muted-text">削除する範囲を選択できます。必要な場合のみ実行してください。</p>
+
+        <div className="reset-action-grid">
+          <button className="ghost-button danger" onClick={onResetAllHistory}>
+            全履歴リセット
+          </button>
+          <button className="ghost-button danger" onClick={onResetMockExamHistory}>
+            本番模擬履歴のみリセット
+          </button>
+          <button className="ghost-button danger" onClick={onClearWrongReviewTargets}>
+            誤答復習対象のみクリア
           </button>
         </div>
       </section>
@@ -1488,18 +1508,7 @@ function ResultScreen({ mode, summary, results, categoryRows, onBackToMenu, onRe
   );
 }
 
-function HistoryScreen({
-  summary,
-  mockExamAttempts,
-  rows,
-  categories,
-  filters,
-  onFilterChange,
-  onResetAllHistory,
-  onResetMockExamHistory,
-  onClearWrongReviewTargets,
-  onBack,
-}) {
+function HistoryScreen({ summary, mockExamAttempts, rows, categories, filters, onFilterChange, onBack }) {
   const selectedCategories = Array.isArray(filters.categories) ? filters.categories : [];
   const isAllSelected = selectedCategories.length === 0;
 
@@ -1843,23 +1852,6 @@ function HistoryScreen({
               );
             })
           )}
-        </div>
-      </section>
-
-      <section className="panel reset-history-panel">
-        <h3>学習履歴のリセット</h3>
-        <p className="muted-text">削除する範囲を選択できます。</p>
-
-        <div className="reset-action-grid">
-          <button className="ghost-button danger" onClick={onResetAllHistory}>
-            全履歴リセット
-          </button>
-          <button className="ghost-button danger" onClick={onResetMockExamHistory}>
-            本番模擬履歴のみリセット
-          </button>
-          <button className="ghost-button danger" onClick={onClearWrongReviewTargets}>
-            誤答復習対象のみクリア
-          </button>
         </div>
       </section>
     </main>
