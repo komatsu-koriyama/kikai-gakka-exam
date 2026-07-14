@@ -11,9 +11,40 @@ const MULTIPLE_CHOICE_SCORE = 0.4;
 
 const LOW_ACCURACY_THRESHOLD = 70;
 
-const APP_VERSION = "0.7.7";
-const APP_UPDATED_AT = "2026-07-09";
+const APP_VERSION = "0.7.8";
+const APP_UPDATED_AT = "2026-07-14";
 const APP_SPEC_NOTE = "計算問題は現段階では除外";
+
+const GUIDELINE_PDF_PATH = `${import.meta.env.BASE_URL}docs/FY2026_kikai_guidline.pdf`;
+
+const APP_CHANGELOG = [
+  {
+    version: "v0.7.8",
+    date: "2026-07-14",
+    changes: [
+      "更新履歴ページを追加",
+      "要領書確認ページを追加",
+      "PDF形式の競技実施要領書をアプリ内から確認可能に変更",
+    ],
+  },
+  {
+    version: "v0.7.7",
+    date: "2026-07-09",
+    changes: [
+      "学習履歴リセットをホーム画面へ移動",
+      "学習履歴画面からリセット機能を削除",
+      "全履歴リセット、本番模擬履歴のみリセット、誤答復習対象のみクリアを選択可能に変更",
+    ],
+  },
+  {
+    version: "v0.7.6",
+    date: "2026-07-09",
+    changes: [
+      "学習履歴画面をスマートフォン向けカード表示に対応",
+      "本番模擬の点数推移をスマートフォンで見やすく改善",
+    ],
+  },
+];
 
 const DEFAULT_HISTORY = {
   questionStats: {},
@@ -724,6 +755,8 @@ function App() {
           onResetMockExamHistory={resetMockExamHistory}
           onClearWrongReviewTargets={clearWrongReviewTargets}
           canStartWrongReview={(history.wrongQuestionIds?.length ?? 0) > 0}
+          onOpenChangelog={() => setScreen("changelog")}
+          onOpenGuideline={() => setScreen("guideline")}
         />
       )}
 
@@ -802,6 +835,15 @@ function App() {
           onBack={backToMenu}
         />
       )}
+
+      {screen === "changelog" && (
+        <ChangelogScreen changelog={APP_CHANGELOG} onBack={backToMenu} />
+      )}
+
+      {screen === "guideline" && (
+        <GuidelineScreen pdfPath={GUIDELINE_PDF_PATH} onBack={backToMenu} />
+      )}
+
     </div>
   );
 }
@@ -877,6 +919,8 @@ function MenuScreen({
   onResetMockExamHistory,
   onClearWrongReviewTargets,
   canStartWrongReview,
+  onOpenChangelog,
+  onOpenGuideline,
 }) {
   return (
     <main className="screen">
@@ -939,23 +983,35 @@ function MenuScreen({
       </section>
 
       <section className="menu-section">
-        <div className="section-title-row">
-          <h2>確認</h2>
-          <p>履歴と問題内容を確認します。</p>
-        </div>
+  <div className="section-title-row">
+    <h2>確認</h2>
+    <p>履歴と問題内容を確認します。</p>
+  </div>
 
-        <div className="menu-grid">
-          <button className="menu-button history" onClick={onOpenHistory}>
-            <span>学習履歴を確認</span>
-            <small>点数推移・弱点確認</small>
-          </button>
+  <div className="menu-grid">
 
-          <button className="menu-button list" onClick={onOpenQuestionList}>
-            <span>問題一覧</span>
-            <small>検索・詳細確認</small>
-          </button>
-        </div>
-      </section>
+    <button className="menu-button history" onClick={onOpenHistory}>
+      <span>学習履歴を確認</span>
+      <small>点数推移・弱点確認</small>
+    </button>
+
+    <button className="menu-button list" onClick={onOpenQuestionList}>
+      <span>問題一覧</span>
+      <small>検索・詳細確認</small>
+    </button>
+
+    <button className="menu-button changelog" onClick={onOpenChangelog}>
+      <span>更新履歴</span>
+      <small>バージョンごとの変更内容を確認</small>
+    </button>
+
+    <button className="menu-button guideline" onClick={onOpenGuideline}>
+      <span>要領書</span>
+      <small>PDF形式の競技実施要領書を確認</small>
+    </button>
+
+  </div>
+</section>
 
       <section className="panel reset-history-panel">
         <h3>学習履歴のリセット</h3>
@@ -2077,6 +2133,71 @@ function QuestionListScreen({
             </article>
           );
         })}
+      </section>
+    </main>
+  );
+}
+
+function ChangelogScreen({ changelog, onBack }) {
+  return (
+    <main className="screen">
+      <div className="page-title-row">
+        <div>
+          <p className="app-kicker">確認</p>
+          <h2>更新履歴</h2>
+        </div>
+        <button className="ghost-button" onClick={onBack}>
+          トップへ戻る
+        </button>
+      </div>
+
+      <section className="panel changelog-panel">
+        {changelog.map((item) => (
+          <article key={item.version} className="changelog-card">
+            <div className="changelog-head">
+              <strong>{item.version}</strong>
+              <span>{item.date}</span>
+            </div>
+
+            <ul>
+              {item.changes.map((change) => (
+                <li key={change}>{change}</li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </section>
+    </main>
+  );
+}
+
+function GuidelineScreen({ pdfPath, onBack }) {
+  return (
+    <main className="screen guideline-screen">
+      <div className="page-title-row">
+        <div>
+          <p className="app-kicker">確認</p>
+          <h2>競技実施要領書</h2>
+        </div>
+        <button className="ghost-button" onClick={onBack}>
+          トップへ戻る
+        </button>
+      </div>
+
+      <section className="panel guideline-panel">
+        <div className="guideline-actions">
+          <a className="wide-button primary link-button" href={pdfPath} target="_blank" rel="noreferrer">
+            PDFを別タブで開く
+          </a>
+        </div>
+
+        <p className="muted-text">
+          要領書では学科試験は80問構成とされていますが、現在のアプリでは計算問題を除外し、○×60問＋択一10問を対象にしています。
+        </p>
+
+        <div className="pdf-viewer-wrap">
+          <iframe title="競技実施要領書PDF" src={pdfPath} />
+        </div>
       </section>
     </main>
   );
