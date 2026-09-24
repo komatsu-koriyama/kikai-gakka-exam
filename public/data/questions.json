@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026/07/08 11:27:09",
+  "generatedAt": "2026/09/24 12:15:19",
   "questionCount": 766,
   "questions": [
     {
@@ -17098,25 +17098,25 @@
       "choices": [
         {
           "id": "A",
-          "text": "0.043055555555555555",
+          "text": "１：２",
           "isCorrect": false,
           "explanation": "1:2はJISの推奨縮尺に含まれる。"
         },
         {
           "id": "B",
-          "text": "0.04513888888888889",
+          "text": "１：５",
           "isCorrect": false,
           "explanation": "1:5も推奨縮尺に含まれる。"
         },
         {
           "id": "C",
-          "text": "0.08402777777777778",
+          "text": "２：１",
           "isCorrect": false,
           "explanation": "2:1は推奨拡大尺度に含まれる。"
         },
         {
           "id": "D",
-          "text": "0.12569444444444444",
+          "text": "３：１",
           "isCorrect": true,
           "explanation": "3:1はJISの標準的な推奨尺度ではない。"
         }
@@ -17129,7 +17129,7 @@
       "shuffleChoices": true,
       "isActive": true,
       "version": 1,
-      "lastUpdated": "2026/07/07 00:00:00"
+      "lastUpdated": "2026/09/24 00:00:00"
     },
     {
       "id": "kt-158",
